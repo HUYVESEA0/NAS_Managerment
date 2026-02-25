@@ -1,19 +1,320 @@
+@import url('https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* Custom Scrollbar for Webkit */
+/* =====================================
+   DESIGN TOKENS — NAS Manager Dark Theme
+   Enterprise Gateway / Navy Dark Mode
+   ===================================== */
+
+:root {
+    --bg-base: #0B0F19;
+    /* Nền tối tĩnh mịch vòm trời đêm */
+    --bg-surface: #111827;
+    /* Cấp độ nổi đầu tiên, chuẩn Gray-900 Tailwind */
+    --bg-elevated: #1F2937;
+    /* Nổi cấp 2 (Card chính) Gray-800 */
+    --bg-card: #1F2937;
+    /* Bằng elevated */
+    --bg-hover: #374151;
+    /* Hover Gray-700 */
+
+    --border-subtle: rgba(255, 255, 255, 0.05);
+    --border-default: rgba(255, 255, 255, 0.08);
+    /* Viền mờ nhẹ nhàng */
+    --border-strong: rgba(255, 255, 255, 0.15);
+
+    --text-primary: #F9FAFB;
+    /* Trắng ngà dễ đọc, Gray-50 */
+    --text-secondary: #9CA3AF;
+    /* Xám bạc dịu mắt, Gray-400 */
+    --text-muted: #6B7280;
+    /* Xám nhạt hơn, Gray-500 */
+
+    --accent-blue: #2563EB;
+    /* Xanh dương đậm đà, chuẩn corporate (Blue-600) */
+    --accent-cyan: #3B82F6;
+    /* Xanh dương lai chút tươi sáng (Blue-500) */
+    --accent-glow: rgba(37, 99, 235, 0.15);
+    /* Ánh sáng bao quanh Blue-600 */
+
+    --success: #059669;
+    /* Xanh ngọc lục bảo trưởng thành (Emerald-600) */
+    --warning: #D97706;
+    /* Vàng cam dịu bớt (Amber-600) */
+    --danger: #DC2626;
+    /* Đỏ gạch chuyên nghiệp (Red-600) */
+
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    /* Trông vuông vức chuyên nghiệp hơn một chút so với 10px */
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+
+    --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+    --shadow-glow: 0 0 15px rgba(37, 99, 235, 0.1);
+    --shadow-elevated: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
+}
+
+/* =====================================
+   BASE RESET
+   ===================================== */
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+    background-color: var(--bg-base);
+    color: var(--text-primary);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* =====================================
+   SCROLLBAR
+   ===================================== */
+
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+    width: 5px;
+    height: 5px;
 }
+
 ::-webkit-scrollbar-track {
-  background: transparent;
+    background: transparent;
 }
+
 ::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
 }
+
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
+    background: rgba(59, 130, 246, 0.4);
+}
+
+/* =====================================
+   COMPONENTS
+   ===================================== */
+
+/* Card */
+.card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+    border-color: var(--border-default);
+    box-shadow: var(--shadow-card), var(--shadow-glow);
+}
+
+/* Status Badges */
+.badge-online {
+    color: var(--success);
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.badge-offline {
+    color: var(--danger);
+    background: rgba(239, 68, 68, 0.12);
+    border: 1px solid rgba(239, 68, 68, 0.25);
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.badge-warn {
+    color: var(--warning);
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.25);
+    padding: 2px 8px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+/* Accent text */
+.text-accent {
+    color: var(--accent-blue);
+}
+
+.text-cyan {
+    color: var(--accent-cyan);
+}
+
+/* Divider */
+.divider {
+    border: none;
+    border-top: 1px solid var(--border-subtle);
+    margin: 0;
+}
+
+/* Fira Code headings */
+.font-mono-display {
+    font-family: 'Fira Code', 'Fira Mono', monospace;
+    letter-spacing: -0.02em;
+}
+
+/* =====================================
+   ANIMATIONS
+   ===================================== */
+
+@keyframes fadeUp {
+    from {
+        transform: translateY(8px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes pulse-dot {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.3;
+    }
+}
+
+.animate-fadeUp {
+    animation: fadeUp 0.2s ease-out;
+}
+
+.animate-fadeIn {
+    animation: fadeIn 0.25s ease-out;
+}
+
+.pulse-dot {
+    animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* Slide in from left */
+@keyframes slideInLeft {
+    from {
+        transform: translateX(-10px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+.animate-slideInLeft {
+    animation: slideInLeft 0.2s ease-out;
+}
+
+/* =====================================
+   INTERACTIVE STATES
+   ===================================== */
+
+button,
+a,
+[role="button"] {
+    cursor: pointer;
+}
+
+/* Focus visible ring */
+*:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+}
+
+/* Smooth transitions */
+button,
+a,
+input,
+select,
+[role="button"] {
+    transition: color 0.15s, background-color 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+
+/* =====================================
+   FORM ELEMENTS
+   ===================================== */
+
+input,
+select,
+textarea {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border-default);
+    color: var(--text-primary);
+    border-radius: var(--radius-md);
+    padding: 8px 12px;
+    font-family: 'Inter', sans-serif;
+    font-size: 14px;
+    outline: none;
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--text-muted);
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+/* =====================================
+   SELECTION
+   ===================================== */
+
+::selection {
+    background: rgba(59, 130, 246, 0.3);
+    color: white;
+}
+
+/* =====================================
+   REDUCED MOTION
+   ===================================== */
+
+@media (prefers-reduced-motion: reduce) {
+
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        transition-duration: 0.01ms !important;
+    }
 }

@@ -37,10 +37,10 @@ call npm install
 if !errorlevel! neq 0 goto ERROR
 cd ..
 
-:: ---- 3. Agent ----
+:: ---- 3. Client Connect (Agent) ----
 echo.
-echo  [4/4] Cai dat Agent dependencies...
-cd agent
+echo  [4/4] Cai dat Client Connect dependencies...
+cd client_connect
 call npm install
 if !errorlevel! neq 0 goto ERROR
 cd ..

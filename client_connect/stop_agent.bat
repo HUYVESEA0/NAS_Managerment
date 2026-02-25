@@ -1,19 +1,20 @@
 @echo off
 setlocal
-title Stop NAS Agent
+title NAS Manager - Ngat Ket Noi
 
-echo ========================================================
-echo      STOP NAS REMOTE AGENT
-echo ========================================================
+echo.
+echo  ================================================
+echo      NAS MANAGER - NGAT KET NOI
+echo  ================================================
 echo.
 
-echo [INFO] Stopping agent process...
+echo  [INFO] Dang ngat ket noi...
 wmic process where "name='node.exe' and commandline like '%%agent.js%%'" call terminate >nul 2>&1
 
 if %errorlevel% equ 0 (
-    echo [SUCCESS] Stopped successfully.
+    echo  [OK] Da ngat ket noi thanh cong.
 ) else (
-    echo [WARN] Could not find running agent or failed to stop.
+    echo  [WARN] Khong tim thay tien trinh dang chay.
 )
 
 echo.

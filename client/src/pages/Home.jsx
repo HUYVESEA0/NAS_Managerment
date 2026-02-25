@@ -6,15 +6,17 @@ import { useAuth } from '../contexts/AuthContext';
 import MachineEditModal from '../components/MachineEditModal';
 import MountPointModal from '../components/MountPointModal';
 import SSHUserModal from '../components/SSHUserModal';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const Home = () => {
+    const { t } = useLanguage();
     const [hierarchy, setHierarchy] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [editingMachine, setEditingMachine] = useState(null);
     const [managingMounts, setManagingMounts] = useState(null);
     const [agentStatuses, setAgentStatuses] = useState({});
-    const [setupModal, setSetupModal] = useState(null); // { machineId, machineName }
+    const [setupModal, setSetupModal] = useState(null);
     const [setupInfo, setSetupInfo] = useState(null);
     const [copiedField, setCopiedField] = useState(null);
     const [sshUserMachine, setSSHUserMachine] = useState(null);
@@ -24,21 +26,17 @@ const Home = () => {
         try {
             const response = await api.get('/hierarchy');
             setHierarchy(response.data);
-
-            // Fetch agent status cho tất cả machines
             const machines = response.data.flatMap(f => f.rooms.flatMap(r => r.machines));
-            const statusPromises = machines.map(m =>
+            const statuses = await Promise.all(machines.map(m =>
                 api.get(`/agents/status/${m.id}`)
                     .then(res => ({ machineId: m.id, connected: res.data.agentConnected }))
                     .catch(() => ({ machineId: m.id, connected: false }))
-            );
-            const statuses = await Promise.all(statusPromises);
+            ));
             const statusMap = {};
             statuses.forEach(s => { statusMap[s.machineId] = s.connected; });
             setAgentStatuses(statusMap);
         } catch (err) {
             setError('Failed to load hierarchy');
-            console.error(err);
         } finally {
             setLoading(false);
         }
@@ -46,13 +44,10 @@ const Home = () => {
 
     useEffect(() => {
         fetchHierarchy();
-        // Refresh agent status mỗi 10s
         const interval = setInterval(() => {
             api.get('/agents').then(res => {
                 const statusMap = {};
-                res.data.forEach(a => {
-                    if (a.machineId) statusMap[a.machineId] = true;
-                });
+                res.data.forEach(a => { if (a.machineId) statusMap[a.machineId] = true; });
                 setAgentStatuses(prev => {
                     const next = {};
                     Object.keys(prev).forEach(k => { next[k] = false; });
@@ -60,13 +55,10 @@ const Home = () => {
                 });
             }).catch(() => { });
         }, 10000);
-
         return () => clearInterval(interval);
     }, []);
 
-    const handleMachineUpdate = () => {
-        fetchHierarchy();
-    };
+    const handleMachineUpdate = () => fetchHierarchy();
 
     const openSetupModal = async (machine) => {
         setSetupModal({ machineId: machine.id, machineName: machine.name });
@@ -84,122 +76,165 @@ const Home = () => {
         setTimeout(() => setCopiedField(null), 2000);
     };
 
-    if (loading) return <div className="p-8 text-center text-gray-500">Loading hierarchy...</div>;
-    if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
+    // ─── Loading State ───────────────────────────────────────────────
+    if (loading) return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, color: 'var(--text-muted)', gap: 10 }}>
+            <div style={{ width: 16, height: 16, borderRadius: '50%', border: '2px solid var(--accent-blue)', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
+            Loading infrastructure...
+            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+    );
 
+    if (error) return (
+        <div style={{ padding: 24, textAlign: 'center', color: 'var(--danger)', background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 12 }}>
+            {error}
+        </div>
+    );
+
+    // ─── Render ───────────────────────────────────────────────────────
     return (
-        <div className="space-y-8">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+
             {hierarchy.map((floor) => (
-                <section key={floor.id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                    <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-                        <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                            <Building className="w-5 h-5 text-indigo-500" />
-                            {floor.name}
-                            <span className="text-sm font-normal text-gray-500 ml-2">({floor.description})</span>
-                        </h3>
+                <section key={floor.id} style={{
+                    background: 'var(--bg-card)',
+                    border: '1px solid var(--border-subtle)',
+                    borderRadius: 14,
+                    overflow: 'hidden',
+                    boxShadow: 'var(--shadow-card)',
+                }}>
+                    {/* Floor Header */}
+                    <div style={{
+                        padding: '14px 20px',
+                        borderBottom: '1px solid var(--border-subtle)',
+                        background: 'linear-gradient(90deg, rgba(59,130,246,0.06) 0%, transparent 60%)',
+                        display: 'flex', alignItems: 'center', gap: 10,
+                    }}>
+                        <div style={{
+                            width: 28, height: 28, borderRadius: 7,
+                            background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.2)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                            <Building size={14} color="var(--accent-blue)" />
+                        </div>
+                        <div>
+                            <span style={{ fontFamily: "'Fira Code', monospace", fontSize: 14, fontWeight: 600, color: 'var(--text-primary)' }}>
+                                {floor.name}
+                            </span>
+                            {floor.description && (
+                                <span style={{ fontSize: 12, color: 'var(--text-muted)', marginLeft: 10 }}>{floor.description}</span>
+                            )}
+                        </div>
+                        <div style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-muted)', fontFamily: "'Fira Code', monospace" }}>
+                            {floor.rooms.reduce((a, r) => a + r.machines.length, 0)} {t('activeMachines')?.toLowerCase()}
+                        </div>
                     </div>
 
-                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {/* Rooms Grid */}
+                    <div style={{ padding: 16, display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
                         {floor.rooms.map((room) => (
-                            <div key={room.id} className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow">
-                                <h4 className="font-medium text-gray-700 mb-4 flex items-center gap-2">
-                                    <Server className="w-4 h-4 text-gray-400" />
-                                    {room.name}
-                                </h4>
+                            <div key={room.id} style={{
+                                background: 'var(--bg-elevated)', border: '1px solid var(--border-subtle)',
+                                borderRadius: 10, overflow: 'hidden',
+                            }}>
+                                {/* Room Header */}
+                                <div style={{ padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                    <Server size={13} color="var(--text-muted)" />
+                                    <span style={{ fontSize: 12, fontWeight: 500, color: 'var(--text-secondary)' }}>{room.name}</span>
+                                </div>
 
-                                <div className="space-y-3">
-                                    {room.machines.map((machine) => (
-                                        <div key={machine.id} className="group relative bg-gray-50 rounded-md p-3 border border-gray-100 hover:border-indigo-200 transition-colors">
-                                            <div className="flex justify-between items-start mb-2">
-                                                <div className="flex items-center gap-2">
-                                                    <Cpu className="w-4 h-4 text-indigo-600" />
-                                                    <span className="font-medium text-gray-900">{machine.name}</span>
-                                                </div>
-                                                <div className="flex items-center gap-1.5">
-                                                    {/* Agent Status Indicator */}
-                                                    {agentStatuses[machine.id] ? (
-                                                        <span className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-                                                            <Wifi className="w-3 h-3" />
-                                                            Agent
-                                                        </span>
-                                                    ) : (
-                                                        <button
-                                                            onClick={() => openSetupModal(machine)}
-                                                            className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-gray-100 text-gray-500 border border-gray-200 hover:bg-indigo-50 hover:text-indigo-600 hover:border-indigo-200 transition-colors cursor-pointer"
-                                                            title="Setup Agent"
-                                                        >
-                                                            <WifiOff className="w-3 h-3" />
-                                                            No Agent
-                                                        </button>
-                                                    )}
-
-                                                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${machine.status === 'online' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                                                        }`}>
-                                                        {machine.status}
-                                                    </span>
-
-                                                    {hasPermission('MANAGE_HIERARCHY', 'WRITE_HIERARCHY') && (
-                                                        <>
-                                                            <button
-                                                                onClick={() => setSSHUserMachine(machine)}
-                                                                className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-emerald-600 transition-colors"
-                                                                title="SSH Users"
-                                                            >
-                                                                <Users className="w-3 h-3" />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => setEditingMachine(machine)}
-                                                                className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-indigo-600 transition-colors"
-                                                                title="Edit Machine Settings"
-                                                            >
-                                                                <Edit2 className="w-3 h-3" />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => setManagingMounts(machine)}
-                                                                className="p-1 hover:bg-gray-200 rounded text-gray-400 hover:text-indigo-600 transition-colors"
-                                                                title="Manage Drives"
-                                                            >
-                                                                <Settings className="w-3 h-3" />
-                                                            </button>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <div className="text-xs text-gray-500 flex items-center gap-1" title="IP Address">
-                                                    <Activity className="w-3 h-3" />
-                                                    {machine.ipAddress || 'No IP'}
-                                                </div>
-                                                {machine.username && (
-                                                    <div className="text-xs text-emerald-600 flex items-center gap-1 font-medium bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-100" title={`SSH User: ${machine.username}`}>
-                                                        <Terminal className="w-3 h-3" />
-                                                        SSH Ready
+                                {/* Machines */}
+                                <div style={{ padding: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                                    {room.machines.map((machine) => {
+                                        const agentConnected = agentStatuses[machine.id];
+                                        const isOnline = machine.status === 'online';
+                                        return (
+                                            <div key={machine.id}
+                                                style={{
+                                                    background: 'var(--bg-card)',
+                                                    border: `1px solid ${agentConnected ? 'rgba(6,182,212,0.2)' : 'var(--border-subtle)'}`,
+                                                    borderRadius: 8, padding: '10px 12px',
+                                                    transition: 'border-color 0.2s, box-shadow 0.2s',
+                                                }}
+                                                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(59,130,246,0.3)'; e.currentTarget.style.boxShadow = '0 2px 12px rgba(59,130,246,0.08)'; }}
+                                                onMouseLeave={e => { e.currentTarget.style.borderColor = agentConnected ? 'rgba(6,182,212,0.2)' : 'var(--border-subtle)'; e.currentTarget.style.boxShadow = 'none'; }}
+                                            >
+                                                {/* Machine top row */}
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                                                        <Cpu size={13} color="var(--accent-cyan)" />
+                                                        <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{machine.name}</span>
                                                     </div>
-                                                )}
-                                            </div>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                                                        {/* Agent status */}
+                                                        {agentConnected ? (
+                                                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, color: '#06B6D4', background: 'rgba(6,182,212,0.1)', border: '1px solid rgba(6,182,212,0.25)' }}>
+                                                                <Wifi size={9} /> Agent
+                                                            </span>
+                                                        ) : (
+                                                            <button onClick={() => openSetupModal(machine)} title="Setup Agent"
+                                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, color: 'var(--text-muted)', background: 'var(--bg-hover)', border: '1px solid var(--border-subtle)', cursor: 'pointer' }}
+                                                                onMouseEnter={e => { e.currentTarget.style.color = 'var(--accent-cyan)'; e.currentTarget.style.borderColor = 'rgba(6,182,212,0.3)'; }}
+                                                                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border-subtle)'; }}
+                                                            ><WifiOff size={9} /> No Agent</button>
+                                                        )}
 
-                                            <div className="space-y-1">
-                                                {machine.mountPoints.length === 0 ? (
-                                                    <div className="text-xs text-center text-gray-400 italic py-2">No drives configured</div>
-                                                ) : (
-                                                    machine.mountPoints.map(mount => (
-                                                        <Link
-                                                            key={mount.id}
+                                                        {/* Online/Offline */}
+                                                        <span style={{ padding: '2px 7px', borderRadius: 20, fontSize: 10, fontWeight: 500, color: isOnline ? '#34D399' : '#F87171', background: isOnline ? 'rgba(16,185,129,0.1)' : 'rgba(239,68,68,0.1)', border: `1px solid ${isOnline ? 'rgba(16,185,129,0.25)' : 'rgba(239,68,68,0.25)'}` }}>
+                                                            {machine.status}
+                                                        </span>
+
+                                                        {/* Actions */}
+                                                        {hasPermission('MANAGE_HIERARCHY', 'WRITE_HIERARCHY') && (<>
+                                                            {[
+                                                                { icon: Users, onClick: () => setSSHUserMachine(machine), title: 'SSH Users', hoverColor: '#34D399', hoverBg: 'rgba(16,185,129,0.1)' },
+                                                                { icon: Edit2, onClick: () => setEditingMachine(machine), title: 'Edit', hoverColor: 'var(--accent-blue)', hoverBg: 'rgba(59,130,246,0.1)' },
+                                                                { icon: Settings, onClick: () => setManagingMounts(machine), title: 'Drives', hoverColor: 'var(--accent-blue)', hoverBg: 'rgba(59,130,246,0.1)' },
+                                                            ].map(({ icon: Icon, onClick, title, hoverColor, hoverBg }) => (
+                                                                <button key={title} onClick={onClick} title={title}
+                                                                    style={{ width: 24, height: 24, borderRadius: 5, background: 'transparent', border: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', cursor: 'pointer' }}
+                                                                    onMouseEnter={e => { e.currentTarget.style.background = hoverBg; e.currentTarget.style.color = hoverColor; }}
+                                                                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                                                                ><Icon size={12} /></button>
+                                                            ))}
+                                                        </>)}
+                                                    </div>
+                                                </div>
+
+                                                {/* IP + SSH tag */}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                                                    <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 11, color: 'var(--text-muted)', fontFamily: "'Fira Code', monospace" }}>
+                                                        <Activity size={10} />{machine.ipAddress || '—'}
+                                                    </span>
+                                                    {machine.username && (
+                                                        <span style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 10, color: '#34D399', background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.2)', padding: '1px 7px', borderRadius: 20 }}>
+                                                            <Terminal size={9} /> SSH Ready
+                                                        </span>
+                                                    )}
+                                                </div>
+
+                                                {/* Mount Points */}
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                                                    {machine.mountPoints.length === 0 ? (
+                                                        <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', padding: '6px 0', fontStyle: 'italic' }}>
+                                                            {t('noDrivesConfigured') || 'No drives configured'}
+                                                        </div>
+                                                    ) : machine.mountPoints.map(mount => (
+                                                        <Link key={mount.id}
                                                             to={`/files?machineId=${machine.id}&path=${encodeURIComponent(mount.path)}`}
-                                                            className="flex items-center gap-2 text-sm text-gray-600 hover:text-indigo-600 hover:bg-white p-1.5 rounded transition-colors"
+                                                            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '5px 8px', borderRadius: 6, fontSize: 12, color: 'var(--text-secondary)', textDecoration: 'none', background: 'var(--bg-elevated)', border: '1px solid transparent', transition: 'all 0.15s' }}
+                                                            onMouseEnter={e => { e.currentTarget.style.color = 'var(--accent-cyan)'; e.currentTarget.style.background = 'rgba(6,182,212,0.06)'; e.currentTarget.style.borderColor = 'rgba(6,182,212,0.2)'; }}
+                                                            onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'var(--bg-elevated)'; e.currentTarget.style.borderColor = 'transparent'; }}
                                                         >
-                                                            <HardDrive className="w-3 h-3" />
-                                                            {mount.name}
-                                                            {agentStatuses[machine.id] && (
-                                                                <Wifi className="w-2.5 h-2.5 text-emerald-500 ml-auto" />
-                                                            )}
+                                                            <HardDrive size={11} style={{ flexShrink: 0 }} />
+                                                            <span style={{ fontFamily: "'Fira Code', monospace", fontSize: 11 }}>{mount.name}</span>
+                                                            {agentConnected && <Wifi size={9} style={{ marginLeft: 'auto', color: 'var(--accent-cyan)', opacity: 0.7 }} />}
                                                         </Link>
-                                                    ))
-                                                )}
+                                                    ))}
+                                                </div>
                                             </div>
-                                        </div>
-                                    ))}
+                                        );
+                                    })}
                                 </div>
                             </div>
                         ))}
@@ -207,137 +242,77 @@ const Home = () => {
                 </section>
             ))}
 
+            {/* Empty State */}
             {hierarchy.length === 0 && (
-                <div className="text-center py-12 bg-white rounded-lg border border-dashed border-gray-300">
-                    <p className="text-gray-500">No infrastructure set up yet.</p>
+                <div style={{ textAlign: 'center', padding: '48px 24px', background: 'var(--bg-card)', border: '1px dashed var(--border-default)', borderRadius: 14, color: 'var(--text-muted)' }}>
+                    <Server size={32} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
+                    <p>{t('noInfrastructure') || 'No infrastructure set up yet.'}</p>
+                    <p style={{ fontSize: 12, marginTop: 4 }}>{t('noInfrastructureHint') || 'Go to Infrastructure tab to add floors and machines.'}</p>
                 </div>
             )}
 
-            {editingMachine && (
-                <MachineEditModal
-                    machine={editingMachine}
-                    onClose={() => setEditingMachine(null)}
-                    onUpdate={handleMachineUpdate}
-                />
-            )}
+            {/* Modals */}
+            {editingMachine && <MachineEditModal machine={editingMachine} onClose={() => setEditingMachine(null)} onUpdate={handleMachineUpdate} />}
+            {managingMounts && <MountPointModal machine={managingMounts} onClose={() => setManagingMounts(null)} onUpdate={handleMachineUpdate} />}
+            {sshUserMachine && <SSHUserModal machine={sshUserMachine} onClose={() => setSSHUserMachine(null)} />}
 
-            {managingMounts && (
-                <MountPointModal
-                    machine={managingMounts}
-                    onClose={() => setManagingMounts(null)}
-                    onUpdate={handleMachineUpdate}
-                />
-            )}
-
-            {sshUserMachine && (
-                <SSHUserModal
-                    machine={sshUserMachine}
-                    onClose={() => setSSHUserMachine(null)}
-                />
-            )}
-
-            {/* ==================== SETUP AGENT MODAL ==================== */}
+            {/* Setup Agent Modal */}
             {setupModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm" onClick={() => { setSetupModal(null); setSetupInfo(null); }}>
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl p-6 animate-scaleIn max-h-[90vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
-                        <div className="flex items-center justify-between mb-6">
+                <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+                    onClick={() => { setSetupModal(null); setSetupInfo(null); }}>
+                    <div className="animate-fadeUp"
+                        style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 16, boxShadow: 'var(--shadow-elevated)', width: '100%', maxWidth: 520, padding: 24, maxHeight: '90vh', overflowY: 'auto' }}
+                        onClick={e => e.stopPropagation()}>
+
+                        {/* Modal Header */}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
                             <div>
-                                <h2 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                                    <Terminal className="w-5 h-5 text-indigo-500" />
-                                    Setup Agent — {setupModal.machineName}
+                                <h2 style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 16, fontWeight: 600, color: 'var(--text-primary)', fontFamily: "'Fira Code', monospace" }}>
+                                    <Terminal size={16} color="var(--accent-blue)" />
+                                    {t('setupAgent') || 'Setup Agent'} — {setupModal.machineName}
                                 </h2>
-                                <p className="text-sm text-gray-500 mt-1">Install the agent on the remote machine to share its directories</p>
+                                <p style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4 }}>{t('setupAgentDesc') || 'Install on remote machine to share directories'}</p>
                             </div>
-                            <button onClick={() => { setSetupModal(null); setSetupInfo(null); }} className="p-1.5 hover:bg-gray-100 rounded-lg">
-                                <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                </svg>
+                            <button onClick={() => { setSetupModal(null); setSetupInfo(null); }}
+                                style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--bg-hover)', border: 'none', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 14 }}>
+                                ✕
                             </button>
                         </div>
 
                         {setupInfo && (
-                            <div className="space-y-5">
-                                {/* Step 1 */}
-                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">1</span>
-                                        <span className="font-medium text-gray-700 text-sm">Copy the <code className="bg-gray-200 px-1.5 py-0.5 rounded text-xs">agent</code> folder to the remote machine</span>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                                {[
+                                    { step: 1, title: <>{t('copyFolder') || 'Copy'} <code style={{ background: 'var(--bg-hover)', padding: '1px 6px', borderRadius: 4, fontFamily: 'monospace', fontSize: 11 }}>client_connect</code> {t('toRemoteMachine') || 'to remote machine'}</>, desc: `${t('locatedAt') || 'Located at:'} NAS_Managerment/client_connect/` },
+                                    { step: 2, title: t('installDependencies') || 'Install dependencies', cmd: 'npm install', field: 'npm' },
+                                    { step: 3, title: t('runTheAgent') || 'Run the agent', cmd: setupInfo.command, field: 'cmd' },
+                                ].map(({ step, title, desc, cmd, field }) => (
+                                    <div key={step} style={{ background: 'var(--bg-card)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 14 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: desc || cmd ? 8 : 0 }}>
+                                            <span style={{ width: 22, height: 22, borderRadius: '50%', flexShrink: 0, background: 'rgba(59,130,246,0.15)', border: '1px solid rgba(59,130,246,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: 'var(--accent-blue)' }}>{step}</span>
+                                            <span style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{title}</span>
+                                        </div>
+                                        {desc && <p style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 30 }}>{desc}</p>}
+                                        {cmd && (
+                                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginLeft: 30, marginTop: 8, background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 7, padding: '8px 10px' }}>
+                                                <code style={{ fontFamily: "'Fira Code', monospace", fontSize: 12, color: '#34D399', wordBreak: 'break-all' }}>{cmd}</code>
+                                                <button onClick={() => copyToClipboard(cmd, field)}
+                                                    style={{ flexShrink: 0, marginLeft: 10, width: 28, height: 28, borderRadius: 6, background: 'var(--bg-elevated)', border: 'none', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+                                                    {copiedField === field ? <CheckCircle size={13} color="#34D399" /> : <Copy size={13} />}
+                                                </button>
+                                            </div>
+                                        )}
                                     </div>
-                                    <p className="text-xs text-gray-500 ml-8">The folder is at <code className="bg-gray-200 px-1 rounded">NAS_Managerment/agent/</code></p>
-                                </div>
+                                ))}
 
-                                {/* Step 2 */}
-                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">2</span>
-                                        <span className="font-medium text-gray-700 text-sm">Install dependencies on the remote machine</span>
-                                    </div>
-                                    <div className="ml-8 mt-2 bg-gray-900 rounded-lg p-3 flex items-center justify-between group">
-                                        <code className="text-green-400 text-sm font-mono">npm install</code>
-                                        <button
-                                            onClick={() => copyToClipboard('npm install', 'npm')}
-                                            className="p-1.5 hover:bg-gray-700 rounded text-gray-500 hover:text-white transition-colors"
-                                        >
-                                            {copiedField === 'npm' ? <CheckCircle className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Step 3 */}
-                                <div className="bg-gray-50 rounded-xl p-4 border border-gray-100">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="w-6 h-6 bg-indigo-100 text-indigo-600 rounded-full flex items-center justify-center text-xs font-bold">3</span>
-                                        <span className="font-medium text-gray-700 text-sm">Run the agent</span>
-                                    </div>
-                                    <div className="ml-8 mt-2 bg-gray-900 rounded-lg p-3 flex items-center justify-between group">
-                                        <code className="text-green-400 text-sm font-mono break-all">{setupInfo.command}</code>
-                                        <button
-                                            onClick={() => copyToClipboard(setupInfo.command, 'cmd')}
-                                            className="p-1.5 hover:bg-gray-700 rounded text-gray-500 hover:text-white transition-colors flex-shrink-0 ml-2"
-                                        >
-                                            {copiedField === 'cmd' ? <CheckCircle className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Step 4 (Optional) */}
-                                <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <span className="w-6 h-6 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center text-xs font-bold">💡</span>
-                                        <span className="font-medium text-blue-700 text-sm">Share specific directories</span>
-                                    </div>
-                                    <div className="ml-8 mt-2 bg-gray-900 rounded-lg p-3 flex items-center justify-between">
-                                        <code className="text-green-400 text-xs font-mono break-all">{setupInfo.command} --paths "C:\\Users,D:\\Data"</code>
-                                        <button
-                                            onClick={() => copyToClipboard(`${setupInfo.command} --paths "C:\\Users,D:\\Data"`, 'paths')}
-                                            className="p-1.5 hover:bg-gray-700 rounded text-gray-500 hover:text-white transition-colors flex-shrink-0 ml-2"
-                                        >
-                                            {copiedField === 'paths' ? <CheckCircle className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
-                                        </button>
-                                    </div>
-                                </div>
-
-                                {/* Connection info */}
-                                <div className="text-xs text-gray-400 text-center pt-2 border-t border-gray-100">
-                                    WebSocket URL: <code className="bg-gray-100 px-1.5 rounded">{setupInfo.wsUrl}</code>
-                                    <span className="mx-2">•</span>
-                                    Machine ID: <code className="bg-gray-100 px-1.5 rounded">{setupInfo.machineId}</code>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center', paddingTop: 8, borderTop: '1px solid var(--border-subtle)', fontFamily: "'Fira Code', monospace" }}>
+                                    WS: <span style={{ color: 'var(--text-secondary)' }}>{setupInfo.wsUrl}</span>
+                                    {' · '}ID: <span style={{ color: 'var(--text-secondary)' }}>{setupInfo.machineId}</span>
                                 </div>
                             </div>
                         )}
                     </div>
                 </div>
             )}
-
-            <style>{`
-                @keyframes scaleIn {
-                    from { transform: scale(0.95); opacity: 0; }
-                    to { transform: scale(1); opacity: 1; }
-                }
-                .animate-scaleIn {
-                    animation: scaleIn 0.2s ease-out;
-                }
-            `}</style>
         </div>
     );
 };

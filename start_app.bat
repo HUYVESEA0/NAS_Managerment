@@ -14,15 +14,17 @@ echo   [2] Production Mode    (Build + Chay 1 tien trinh)
 echo   [3] Chi chay Server    (Backend API only)
 echo   [4] Chi chay Client    (Frontend Dev only)
 echo   [5] Setup / Install    (Cai dat lan dau)
+echo   [6] Kill Node          (Sua loi address already in use)
 echo   [0] Thoat
 echo.
-set /p choice=  Chon (0-5): 
+set /p choice=  Chon (0-6): 
 
 if "!choice!"=="1" goto DEV
 if "!choice!"=="2" goto PROD
 if "!choice!"=="3" goto SERVER_ONLY
 if "!choice!"=="4" goto CLIENT_ONLY
 if "!choice!"=="5" goto SETUP
+if "!choice!"=="6" goto KILL_NODE
 if "!choice!"=="0" exit
 goto MENU
 
@@ -32,6 +34,9 @@ goto MENU
 cls
 echo.
 echo  [DEV] Starting Development Mode...
+echo  (Dang dung cac tien trinh cu de tranh loi Port...)
+taskkill /F /IM node.exe >nul 2>&1
+
 echo  Server: http://localhost:3001
 echo  Client: http://localhost:5173
 echo.
@@ -50,6 +55,8 @@ cls
 echo.
 echo  [PROD] Production Mode
 echo  ================================================
+echo  (Dang dung cac tien trinh cu de tranh loi Port...)
+taskkill /F /IM node.exe >nul 2>&1
 echo.
 
 :: Check if client/dist exists
@@ -80,7 +87,7 @@ if not exist "client\dist\" (
 
 :: Start Agent hidden
 echo  [AGENT] Khoi dong Local Agent (ngam)...
-powershell -Command "Start-Process node -ArgumentList 'agent.js' -WorkingDirectory '%~dp0agent' -WindowStyle Hidden" >nul 2>&1
+powershell -Command "Start-Process node -ArgumentList 'agent.js' -WorkingDirectory '%~dp0client_connect' -WindowStyle Hidden" >nul 2>&1
 
 :: Start Server in Production
 echo  [SERVER] Khoi dong Production Server...
@@ -98,6 +105,8 @@ goto END
 :SERVER_ONLY
 :: ============================================
 echo.
+echo  (Dang dung cac tien trinh cu de tranh loi Port...)
+taskkill /F /IM node.exe >nul 2>&1
 echo  [SERVER] Starting Backend Server (port 3001)...
 start "NAS Backend" cmd /k "cd server && npm run dev"
 goto END
@@ -106,6 +115,8 @@ goto END
 :CLIENT_ONLY
 :: ============================================
 echo.
+echo  (Dang dung cac tien trinh cu de tranh loi Port...)
+taskkill /F /IM node.exe >nul 2>&1
 echo  [CLIENT] Starting Frontend Client (port 5173)...
 start "NAS Frontend" cmd /k "cd client && npm run dev"
 goto END
@@ -114,6 +125,18 @@ goto END
 :SETUP
 :: ============================================
 call setup_app.bat
+goto MENU
+
+:: ============================================
+:KILL_NODE
+:: ============================================
+cls
+echo.
+echo  [KILL] Dang tat cac tien trinh Node.js chay ngam...
+taskkill /F /IM node.exe >nul 2>&1
+echo  [DONE] Da don dep. Port 3001, 5173 da duoc tra lai.
+echo.
+pause
 goto MENU
 
 :: ============================================

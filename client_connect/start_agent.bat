@@ -1,26 +1,28 @@
 @echo off
 setlocal
-title NAS Remote Agent Service
+title NAS Manager - Client Connect
 
-echo ========================================================
-echo      NAS REMOTE AGENT - STARTING...
-echo ========================================================
+echo.
+echo  ================================================
+echo      NAS MANAGER - CLIENT CONNECT
+echo  ================================================
 echo.
 
-:: 1. Kiem tra config
+:: Kiem tra da setup chua
 if not exist "agent.config.json" (
-    echo [ERROR] Agent chua duoc cau hinh!
-    echo Vui long chay 'setup_agent.bat' truoc.
+    echo  [ERROR] Chua cau hinh!
+    echo  Vui long chay 'setup_agent.bat' truoc.
+    echo.
     pause
     exit /b
 )
 
-:: 2. Chay agent (Hidden)
-echo [INFO] Dang khoi dong NAS Agent (An)...
+:: Chay ngam (Hidden)
+echo  [INFO] Dang ket noi toi NAS Server...
 powershell -Command "Start-Process node -ArgumentList 'agent.js' -WorkingDirectory '%~dp0' -WindowStyle Hidden"
 
+echo  [OK] Da ket noi thanh cong (chay ngam).
 echo.
-echo [SUCCESS] Agent da duoc khoi dong chay ngam.
-echo De dung Agent, chay file 'stop_agent.bat'.
+echo  De ngat ket noi: chay 'stop_agent.bat'
 echo.
 pause

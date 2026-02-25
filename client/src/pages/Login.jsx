@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { Server, Eye, EyeOff, LogIn, AlertCircle } from 'lucide-react';
+import { useLanguage, LANGUAGES } from '../contexts/LanguageContext';
+import { Server, Eye, EyeOff, LogIn, AlertCircle, Shield } from 'lucide-react';
 
 const Login = () => {
     const [username, setUsername] = useState('');
@@ -13,158 +14,336 @@ const Login = () => {
     const { login } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-
     const from = location.state?.from?.pathname || '/';
+
+    const handleOperatorLogin = async () => {
+        setError('');
+        setLoading(true);
+        try {
+            await login('operator', 'operator123');
+            navigate(from, { replace: true });
+        } catch (err) {
+            setError(err.response?.data?.error || t('loginFailed') || 'Login failed');
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
         setLoading(true);
 
+        const loginUser = username.trim() || 'operator';
+        const loginPass = password || 'operator123';
+
         try {
-            await login(username, password);
+            await login(loginUser, loginPass);
             navigate(from, { replace: true });
         } catch (err) {
-            setError(err.response?.data?.error || 'Login failed. Please try again.');
+            setError(err.response?.data?.error || t('loginFailed') || 'Login failed');
         } finally {
             setLoading(false);
         }
     };
 
-    return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 relative overflow-hidden">
-            {/* Animated Background Elements */}
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute -top-40 -right-40 w-80 h-80 bg-indigo-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '4s' }}></div>
-                <div className="absolute -bottom-40 -left-40 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '6s' }}></div>
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-cyan-500/5 rounded-full blur-3xl animate-pulse" style={{ animationDuration: '5s' }}></div>
+    const S = {
+        page: {
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: 'var(--bg-base)',
+            position: 'relative',
+            overflow: 'hidden',
+            padding: '24px',
+        },
+        // Subtle grid pattern background
+        bgGrid: {
+            position: 'absolute', inset: 0, pointerEvents: 'none',
+            backgroundImage: 'radial-gradient(rgba(59,130,246,0.06) 1px, transparent 1px)',
+            backgroundSize: '36px 36px',
+        },
+        // Soft glow blobs
+        glow1: {
+            position: 'absolute', top: '-10%', right: '-5%',
+            width: 400, height: 400,
+            background: 'radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%)',
+            pointerEvents: 'none',
+        },
+        glow2: {
+            position: 'absolute', bottom: '-10%', left: '-5%',
+            width: 500, height: 500,
+            background: 'radial-gradient(circle, rgba(6,182,212,0.06) 0%, transparent 70%)',
+            pointerEvents: 'none',
+        },
+        // Card container
+        wrap: {
+            position: 'relative', zIndex: 10,
+            width: '100%', maxWidth: 400,
+        },
+        // Top logo section
+        logoWrap: { textAlign: 'center', marginBottom: 28 },
+        logoBox: {
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            width: 64, height: 64, borderRadius: 16,
+            background: 'linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%)',
+            boxShadow: '0 8px 24px rgba(59,130,246,0.35)',
+            marginBottom: 16, cursor: 'default',
+            transition: 'transform 0.2s',
+        },
+        title: {
+            fontFamily: "'Fira Code', monospace",
+            fontSize: 24, fontWeight: 700,
+            color: 'var(--text-primary)',
+            letterSpacing: '-0.03em',
+            marginBottom: 6,
+        },
+        subtitle: { fontSize: 13, color: 'var(--text-muted)' },
+        // Main form card
+        card: {
+            background: 'var(--bg-elevated)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 16,
+            padding: '28px 28px 24px',
+            boxShadow: '0 16px 48px rgba(0,0,0,0.4)',
+            marginBottom: 14,
+        },
+        label: {
+            display: 'block', fontSize: 12, fontWeight: 600,
+            color: 'var(--text-secondary)', marginBottom: 7,
+            textTransform: 'uppercase', letterSpacing: '0.06em',
+        },
+        inputWrap: { position: 'relative', marginBottom: 18 },
+        input: {
+            width: '100%', padding: '10px 14px',
+            background: 'var(--bg-hover)',
+            border: '1px solid var(--border-default)',
+            borderRadius: 10, fontSize: 14,
+            color: 'var(--text-primary)',
+            outline: 'none', boxSizing: 'border-box',
+            fontFamily: "'Fira Code', monospace",
+        },
+        inputPwPadding: { paddingRight: 44 },
+        eyeBtn: {
+            position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
+            background: 'none', border: 'none', cursor: 'pointer',
+            color: 'var(--text-muted)', padding: 4, display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+        },
+        submitBtn: {
+            flex: 1, padding: '12px',
+            background: 'linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%)',
+            border: 'none', borderRadius: 10,
+            fontSize: 14, fontWeight: 600, color: 'white',
+            cursor: 'pointer', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', gap: 8,
+            boxShadow: '0 4px 16px rgba(59,130,246,0.3)',
+            transition: 'opacity 0.15s, transform 0.1s',
+        },
+        cancelBtn: {
+            padding: '12px 20px',
+            background: 'var(--bg-hover)',
+            border: '1px solid var(--border-default)', borderRadius: 10,
+            fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)',
+            cursor: 'pointer', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', gap: 8,
+            transition: 'all 0.15s',
+        },
+        btnGroup: {
+            display: 'flex', gap: 10, marginTop: 22,
+        },
+        submitBtnDisabled: { opacity: 0.6, cursor: 'not-allowed' },
+        errorBox: {
+            display: 'flex', alignItems: 'center', gap: 8,
+            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
+            borderRadius: 9, padding: '10px 12px',
+            marginBottom: 18, fontSize: 13, color: '#F87171',
+        },
+        // Demo accounts
+        demo: {
+            background: 'rgba(255,255,255,0.02)',
+            border: '1px solid var(--border-subtle)',
+            borderRadius: 12, padding: '14px 16px',
+        },
+        demoTitle: {
+            fontSize: 10, fontWeight: 600, color: 'var(--text-muted)',
+            textTransform: 'uppercase', letterSpacing: '0.1em',
+            textAlign: 'center', marginBottom: 10,
+        },
+        demoRow: {
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+            padding: '7px 10px', borderRadius: 7,
+            background: 'rgba(255,255,255,0.03)', marginBottom: 5,
+        },
+        demoCode: { fontFamily: "'Fira Code', monospace", fontSize: 11, color: 'var(--text-secondary)' },
+    };
 
-                {/* Grid pattern */}
-                <div className="absolute inset-0" style={{
-                    backgroundImage: 'radial-gradient(rgba(99, 102, 241, 0.08) 1px, transparent 1px)',
-                    backgroundSize: '40px 40px'
-                }}></div>
+    const ROLES = [
+        { cred: 'admin / admin123', role: 'ADMIN', color: '#F87171', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.25)' },
+        { cred: 'operator / operator123', role: 'OPERATOR', color: '#FBBF24', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.25)' },
+        { cred: 'user / user123', role: 'USER', color: '#34D399', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.25)' },
+    ];
+
+    const { t, lang, setLang, currentLang } = useLanguage();
+
+    return (
+        <div style={S.page}>
+            <div style={S.bgGrid} />
+            <div style={S.glow1} />
+            <div style={S.glow2} />
+
+            {/* Language switcher — top right corner */}
+            <div style={{ position: 'absolute', top: 20, right: 24, display: 'flex', alignItems: 'center', gap: 4, zIndex: 20 }}>
+                {LANGUAGES.map(l => {
+                    const isActive = l.code === lang;
+                    return (
+                        <button
+                            key={l.code}
+                            id={`login-lang-${l.code}`}
+                            onClick={() => setLang(l.code)}
+                            title={l.label}
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 5,
+                                padding: '5px 10px', borderRadius: 7,
+                                background: isActive ? 'rgba(59,130,246,0.14)' : 'rgba(255,255,255,0.04)',
+                                border: `1px solid ${isActive ? 'rgba(59,130,246,0.35)' : 'rgba(255,255,255,0.08)'}`,
+                                cursor: 'pointer', fontSize: 13,
+                                color: isActive ? 'var(--accent-blue)' : 'var(--text-muted)',
+                                fontFamily: isActive ? "'Fira Code', monospace" : 'inherit',
+                                fontWeight: isActive ? 700 : 400,
+                                transition: 'all 0.15s',
+                            }}
+                            onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.color = 'var(--text-secondary)'; } }}
+                            onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text-muted)'; } }}
+                        >
+                            <span style={{ fontSize: 15 }}>{l.flag}</span>
+                            <span style={{ fontSize: 11, fontFamily: "'Fira Code', monospace" }}>{l.short}</span>
+                        </button>
+                    );
+                })}
             </div>
 
-            <div className="relative z-10 w-full max-w-md px-6">
-                {/* Logo & Title */}
-                <div className="text-center mb-8">
-                    <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 shadow-2xl shadow-indigo-500/30 mb-6 transform hover:scale-105 transition-transform duration-300">
-                        <Server className="w-10 h-10 text-white" />
+            <div style={S.wrap} className="animate-fadeUp">
+                {/* Logo */}
+                <div style={S.logoWrap}>
+                    <div style={S.logoBox}
+                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
+                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                    >
+                        <Server size={28} color="white" />
                     </div>
-                    <h1 className="text-3xl font-bold text-white mb-2 tracking-tight">
-                        NAS Manager
-                    </h1>
-                    <p className="text-slate-400 text-sm">
-                        Sign in to access the management dashboard
-                    </p>
+                    <div style={S.title}>{t('loginTitle')}</div>
+                    <div style={S.subtitle}>{t('loginSubtitle')}</div>
                 </div>
 
-                {/* Login Card */}
-                <div className="bg-white/[0.07] backdrop-blur-xl border border-white/[0.1] rounded-2xl p-8 shadow-2xl">
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        {/* Error Message */}
+                {/* Form Card */}
+                <div style={S.card}>
+                    <form onSubmit={handleSubmit} noValidate>
+                        {/* Error */}
                         {error && (
-                            <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 text-red-300 px-4 py-3 rounded-xl text-sm animate-shake">
-                                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                            <div style={S.errorBox} className="animate-fadeIn">
+                                <AlertCircle size={15} style={{ flexShrink: 0 }} />
                                 <span>{error}</span>
                             </div>
                         )}
 
                         {/* Username */}
-                        <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">
-                                Username
-                            </label>
+                        <label style={S.label} htmlFor="login-username">{t('username')}</label>
+                        <div style={S.inputWrap}>
                             <input
                                 id="login-username"
                                 type="text"
                                 value={username}
-                                onChange={(e) => setUsername(e.target.value)}
-                                placeholder="Enter username"
-                                required
+                                onChange={e => setUsername(e.target.value)}
+                                placeholder={t('username')}
                                 autoFocus
-                                className="w-full px-4 py-3 bg-white/[0.06] border border-white/[0.1] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all duration-300"
+                                style={S.input}
+                                onFocus={e => { e.target.style.borderColor = 'var(--accent-blue)'; e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.12)'; }}
+                                onBlur={e => { e.target.style.borderColor = 'var(--border-default)'; e.target.style.boxShadow = 'none'; }}
                             />
                         </div>
 
                         {/* Password */}
-                        <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">
-                                Password
-                            </label>
-                            <div className="relative">
-                                <input
-                                    id="login-password"
-                                    type={showPassword ? 'text' : 'password'}
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    placeholder="Enter password"
-                                    required
-                                    className="w-full px-4 py-3 pr-12 bg-white/[0.06] border border-white/[0.1] rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500/50 transition-all duration-300"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-300 transition-colors p-1"
-                                >
-                                    {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                                </button>
-                            </div>
+                        <label style={S.label} htmlFor="login-password">{t('password')}</label>
+                        <div style={{ position: 'relative', marginBottom: 4 }}>
+                            <input
+                                id="login-password"
+                                type={showPassword ? 'text' : 'password'}
+                                value={password}
+                                onChange={e => setPassword(e.target.value)}
+                                placeholder="••••••••"
+                                style={{ ...S.input, ...S.inputPwPadding }}
+                                onFocus={e => { e.target.style.borderColor = 'var(--accent-blue)'; e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.12)'; }}
+                                onBlur={e => { e.target.style.borderColor = 'var(--border-default)'; e.target.style.boxShadow = 'none'; }}
+                            />
+                            <button type="button" onClick={() => setShowPassword(!showPassword)} style={S.eyeBtn}
+                                onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
+                                onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
+                            >
+                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                            </button>
                         </div>
 
-                        {/* Submit Button */}
-                        <button
-                            id="login-submit"
-                            type="submit"
-                            disabled={loading}
-                            className="w-full py-3.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white font-semibold rounded-xl shadow-lg shadow-indigo-500/25 hover:shadow-indigo-500/40 transition-all duration-300 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed active:scale-[0.98]"
-                        >
-                            {loading ? (
-                                <>
-                                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                    Signing in...
-                                </>
-                            ) : (
-                                <>
-                                    <LogIn className="w-5 h-5" />
-                                    Sign In
-                                </>
-                            )}
-                        </button>
+                        <div style={S.btnGroup}>
+                            {/* Sign In button */}
+                            <button
+                                id="login-submit"
+                                type="submit"
+                                disabled={loading}
+                                style={{ ...S.submitBtn, ...(loading ? S.submitBtnDisabled : {}) }}
+                                onMouseEnter={e => { if (!loading) e.currentTarget.style.opacity = '0.88'; }}
+                                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
+                                onMouseDown={e => { if (!loading) e.currentTarget.style.transform = 'scale(0.98)'; }}
+                                onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
+                            >
+                                {loading ? (
+                                    <>
+                                        <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
+                                        {t('signIn') || 'Đăng nhập'}...
+                                    </>
+                                ) : (
+                                    <>
+                                        <LogIn size={16} />
+                                        {t('signIn')}
+                                    </>
+                                )}
+                            </button>
+
+                            {/* Cancel button */}
+                            <button
+                                type="button"
+                                onClick={handleOperatorLogin}
+                                disabled={loading}
+                                style={{ ...S.cancelBtn, ...(loading ? { opacity: 0.6, cursor: 'not-allowed' } : {}) }}
+                                onMouseEnter={e => { if (!loading) { e.currentTarget.style.background = 'var(--bg-elevated)'; e.currentTarget.style.color = 'var(--text-primary)'; } }}
+                                onMouseLeave={e => { if (!loading) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)'; } }}
+                            >
+                                {t('cancel') || 'Hủy bỏ'}
+                            </button>
+                        </div>
                     </form>
                 </div>
 
-                {/* Demo Credentials */}
-                <div className="mt-6 bg-white/[0.04] backdrop-blur border border-white/[0.06] rounded-xl p-4">
-                    <p className="text-xs text-slate-500 text-center mb-3 uppercase tracking-wider font-medium">Demo Accounts</p>
-                    <div className="space-y-2 text-xs">
-                        <div className="flex justify-between items-center text-slate-400 bg-white/[0.03] rounded-lg px-3 py-2">
-                            <span className="font-mono">admin / admin123</span>
-                            <span className="px-2 py-0.5 bg-red-500/20 text-red-300 rounded-full text-[10px] font-medium">ADMIN</span>
-                        </div>
-                        <div className="flex justify-between items-center text-slate-400 bg-white/[0.03] rounded-lg px-3 py-2">
-                            <span className="font-mono">operator / operator123</span>
-                            <span className="px-2 py-0.5 bg-amber-500/20 text-amber-300 rounded-full text-[10px] font-medium">OPERATOR</span>
-                        </div>
-                        <div className="flex justify-between items-center text-slate-400 bg-white/[0.03] rounded-lg px-3 py-2">
-                            <span className="font-mono">user / user123</span>
-                            <span className="px-2 py-0.5 bg-green-500/20 text-green-300 rounded-full text-[10px] font-medium">USER</span>
-                        </div>
+                {/* Demo accounts */}
+                <div style={S.demo}>
+                    <div style={S.demoTitle}>
+                        <Shield size={9} style={{ display: 'inline', marginRight: 5 }} />
+                        {t('demoAccounts')}
                     </div>
+                    {ROLES.map(({ cred, role, color, bg, border }) => (
+                        <div key={role} style={S.demoRow}>
+                            <span style={S.demoCode}>{cred}</span>
+                            <span style={{ fontSize: 10, fontWeight: 700, color, background: bg, border: `1px solid ${border}`, padding: '2px 7px', borderRadius: 20, letterSpacing: '0.05em' }}>
+                                {role}
+                            </span>
+                        </div>
+                    ))}
                 </div>
             </div>
 
-            {/* Custom animation */}
             <style>{`
-                @keyframes shake {
-                    0%, 100% { transform: translateX(0); }
-                    25% { transform: translateX(-5px); }
-                    75% { transform: translateX(5px); }
-                }
-                .animate-shake {
-                    animation: shake 0.3s ease-in-out;
-                }
+                @keyframes spin { to { transform: rotate(360deg); } }
             `}</style>
         </div>
     );

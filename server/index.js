@@ -39,7 +39,7 @@ app.get('/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime
 // === PRODUCTION: SPA Fallback (React Router) ===
 // Must be AFTER /api routes so API calls are not intercepted
 if (isProd) {
-    app.get('*', (req, res) => {
+    app.get('/{*splat}', (req, res) => {
         res.sendFile(path.join(CLIENT_DIST, 'index.html'));
     });
 } else {

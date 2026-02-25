@@ -75,7 +75,7 @@ exports.createMachine = async (req, res) => {
 exports.updateMachine = async (req, res) => {
     try {
         const { id } = req.params;
-        const { name, ipAddress, username, password, port, status } = req.body;
+        const { name, ipAddress, username, password, port, status, roomId } = req.body;
 
         const updateData = {};
         if (name) updateData.name = name;
@@ -84,6 +84,7 @@ exports.updateMachine = async (req, res) => {
         if (password) updateData.password = password; // Should encrypt
         if (port) updateData.port = parseInt(port);
         if (status) updateData.status = status;
+        if (roomId) updateData.roomId = parseInt(roomId);
 
         const machine = await prisma.machine.update({
             where: { id: parseInt(id) },
