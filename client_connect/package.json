@@ -1,0 +1,12 @@
+{
+    "name": "nas-agent",
+    "version": "1.0.0",
+    "description": "NAS Manager Agent - Runs on remote machines to share directories",
+    "main": "agent.js",
+    "scripts": {
+        "start": "node agent.js"
+    },
+    "dependencies": {
+        "ws": "^8.18.0"
+    }
+}
