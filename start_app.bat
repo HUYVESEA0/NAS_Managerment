@@ -15,6 +15,7 @@ echo   [3] Chi chay Server    (Backend API only)
 echo   [4] Chi chay Client    (Frontend Dev only)
 echo   [5] Setup / Install    (Cai dat lan dau)
 echo   [6] Kill Node          (Sua loi address already in use)
+echo   [7] PM2 Manager        (Chay ngam, tu khoi dong)
 echo   [0] Thoat
 echo.
 set /p choice=  Chon (0-6): 
@@ -25,7 +26,14 @@ if "!choice!"=="3" goto SERVER_ONLY
 if "!choice!"=="4" goto CLIENT_ONLY
 if "!choice!"=="5" goto SETUP
 if "!choice!"=="6" goto KILL_NODE
+if "!choice!"=="7" goto PM2_MANAGER
 if "!choice!"=="0" exit
+goto MENU
+
+:: ============================================
+:PM2_MANAGER
+:: ============================================
+call run_pm2.bat
 goto MENU
 
 :: ============================================
@@ -53,7 +61,7 @@ goto END
 :: ============================================
 cls
 echo.
-echo  [PROD] Production Mode
+echo  [PROD] Mode San pham (Production)
 echo  ================================================
 echo  (Dang dung cac tien trinh cu de tranh loi Port...)
 taskkill /F /IM node.exe >nul 2>&1
@@ -65,37 +73,30 @@ if not exist "client\dist\" (
     echo.
     cd client
     call npm run build
-    if !errorlevel! neq 0 (
-        echo  [ERROR] Build that bai!
-        pause
-        cd ..
-        goto MENU
-    )
     cd ..
-    echo  [BUILD] Build thanh cong!
-    echo.
 ) else (
-    echo  [INFO] Ban build ton tai. Dung 'Rebuild' de cap nhat.
-    echo.
-    set /p rebuildchoice=  Rebuild client? (Y/N, Enter=N): 
-    if /i "!rebuildchoice!"=="Y" (
+    echo  [INFO] Ban build hien tai da san sang.
+    set /p rebuildchoice=  Rebuild lai Client? (y/N): 
+    if /i "!rebuildchoice!"=="y" (
         cd client
         call npm run build
         cd ..
     )
 )
 
-:: Start Agent hidden
-echo  [AGENT] Khoi dong Local Agent (ngam)...
-powershell -Command "Start-Process node -ArgumentList 'agent.js' -WorkingDirectory '%~dp0client_connect' -WindowStyle Hidden" >nul 2>&1
+:: Start Local Agent
+echo.
+echo  [AGENT] Khoi dong Local Agent...
+start "NAS Agent (Local)" cmd /c "cd client_connect && node agent.js"
 
 :: Start Server in Production
+echo.
 echo  [SERVER] Khoi dong Production Server...
 echo  Web UI + API: http://localhost:3001
 echo.
 
-start "NAS Manager" cmd /k "cd server && npm run start:prod"
-timeout /t 3 >nul
+start "NAS Manager (Prod)" cmd /k "cd server && npm run start:prod"
+timeout /t 5 >nul
 
 :: Open browser
 start http://localhost:3001

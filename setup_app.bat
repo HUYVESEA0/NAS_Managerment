@@ -14,6 +14,8 @@ echo  [1/4] Cai dat Server dependencies...
 cd server
 call npm install
 if !errorlevel! neq 0 goto ERROR
+call npm run build
+if !errorlevel! neq 0 goto ERROR
 
 echo.
 echo  [2/4] Khoi tao Database...

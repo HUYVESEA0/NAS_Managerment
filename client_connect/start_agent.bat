@@ -17,12 +17,19 @@ if not exist "agent.config.json" (
     exit /b
 )
 
-:: Chay ngam (Hidden)
-echo  [INFO] Dang ket noi toi NAS Server...
-powershell -Command "Start-Process node -ArgumentList 'agent.js' -WorkingDirectory '%~dp0' -WindowStyle Hidden"
+echo   [1] Chay Agent (Cua so Console hien thi)
+echo   [2] Chay Agent (Background via PM2)
+echo.
+set /p mode=  Chon che do (1-2): 
 
-echo  [OK] Da ket noi thanh cong (chay ngam).
+if "!mode!"=="2" (
+    call run_pm2.bat
+    exit /b
+)
+
+:: Chay Agent Console
+cls
+echo  [INFO] Dang ket noi toi NAS Server...
 echo.
-echo  De ngat ket noi: chay 'stop_agent.bat'
-echo.
+node agent.js
 pause

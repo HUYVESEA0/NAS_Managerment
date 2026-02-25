@@ -548,7 +548,7 @@ function listFiles(targetPath) {
 /**
  * Đọc file content (base64)
  */
-function readFile(filePath) {
+async function readFile(filePath) {
     try {
         let resolvedPath = filePath;
         if (!path.isAbsolute(filePath)) {
@@ -559,7 +559,7 @@ function readFile(filePath) {
             return { error: `File not found: ${filePath}` };
         }
 
-        const stat = fs.statSync(resolvedPath);
+        const stat = await fs.promises.stat(resolvedPath);
         if (stat.isDirectory()) {
             return { error: 'Cannot read directory as file' };
         }
@@ -568,7 +568,7 @@ function readFile(filePath) {
             return { error: 'File too large (max 100MB)' };
         }
 
-        const content = fs.readFileSync(resolvedPath);
+        const content = await fs.promises.readFile(resolvedPath);
         return {
             content: content.toString('base64'),
             size: stat.size,
@@ -590,28 +590,33 @@ async function getSystemInfo() {
 // ==================== SEARCH ====================
 
 /**
- * Tìm kiếm files recursive
+ * Tìm kiếm files recursive (Async + Non-blocking)
  */
-function searchFiles(params) {
+async function searchFiles(params) {
     try {
-        const { path: searchPath, query, extensions, minSize, maxSize, type } = params;
-        let basePath = searchPath || process.cwd();
-        if (!path.isAbsolute(basePath)) basePath = path.resolve(process.cwd(), basePath);
+        const { path: searchPath, query, extensions, minSize, maxSize, type, configPaths } = params;
 
-        if (!fs.existsSync(basePath)) {
-            return { error: `Path not found: ${searchPath}` };
+        // Xác định danh sách đường dẫn cần lùng sục
+        let pathsToSearch = [];
+        if (!searchPath || searchPath === '/' || searchPath === '.') {
+            pathsToSearch = (configPaths && configPaths.length > 0) ? configPaths : [process.cwd()];
+        } else {
+            let basePath = searchPath;
+            if (!path.isAbsolute(basePath)) basePath = path.resolve(process.cwd(), basePath);
+            pathsToSearch = [basePath];
         }
 
         const results = [];
         const maxResults = 100;
-        const maxDepth = 5;
+        const maxDepth = 8;
+        let filesScanned = 0;
 
-        function walk(dir, depth) {
+        async function walk(dir, depth, basePathForRelative) {
             if (depth > maxDepth || results.length >= maxResults) return;
 
             let entries;
             try {
-                entries = fs.readdirSync(dir, { withFileTypes: true });
+                entries = await fs.promises.readdir(dir, { withFileTypes: true });
             } catch {
                 return;
             }
@@ -619,11 +624,17 @@ function searchFiles(params) {
             for (const entry of entries) {
                 if (results.length >= maxResults) break;
 
+                // Tránh block event loop (để agent vẫn phản hồi heartbeat của server)
+                filesScanned++;
+                if (filesScanned % 100 === 0) {
+                    await new Promise(resolve => setImmediate(resolve));
+                }
+
                 const fullPath = path.join(dir, entry.name);
-                const relativePath = path.relative(basePath, fullPath).replace(/\\/g, '/');
+                const relativePath = path.relative(basePathForRelative, fullPath).replace(/\\/g, '/');
                 const isDir = entry.isDirectory();
 
-                if (type === 'file' && isDir) { if (isDir) walk(fullPath, depth + 1); continue; }
+                if (type === 'file' && isDir) { await walk(fullPath, depth + 1, basePathForRelative); continue; }
                 if (type === 'directory' && !isDir) { continue; }
 
                 let matches = true;
@@ -639,7 +650,7 @@ function searchFiles(params) {
 
                 if (matches && !isDir) {
                     try {
-                        const stat = fs.statSync(fullPath);
+                        const stat = await fs.promises.stat(fullPath);
                         if (minSize && stat.size < minSize) matches = false;
                         if (maxSize && stat.size > maxSize) matches = false;
 
@@ -663,11 +674,19 @@ function searchFiles(params) {
                     });
                 }
 
-                if (isDir) walk(fullPath, depth + 1);
+                if (isDir) {
+                    await walk(fullPath, depth + 1, basePathForRelative);
+                }
             }
         }
 
-        walk(basePath, 0);
+        for (const basePath of pathsToSearch) {
+            if (results.length >= maxResults) break;
+            if (fs.existsSync(basePath)) {
+                await walk(basePath, 0, basePath);
+            }
+        }
+
         return results;
     } catch (err) {
         return { error: err.message };
@@ -677,7 +696,7 @@ function searchFiles(params) {
 /**
  * Preview file content
  */
-function previewFile(params) {
+async function previewFile(params) {
     try {
         const { path: filePath, type: previewType, maxSize } = params;
         let resolvedPath = filePath;
@@ -687,27 +706,27 @@ function previewFile(params) {
             return { error: `File not found: ${filePath}` };
         }
 
-        const stat = fs.statSync(resolvedPath);
+        const stat = await fs.promises.stat(resolvedPath);
         const limit = maxSize || 50000;
 
         if (stat.size > limit) {
             if (previewType === 'text') {
-                const fd = fs.openSync(resolvedPath, 'r');
+                const handle = await fs.promises.open(resolvedPath, 'r');
                 const buffer = Buffer.alloc(limit);
-                fs.readSync(fd, buffer, 0, limit, 0);
-                fs.closeSync(fd);
+                await handle.read(buffer, 0, limit, 0);
+                await handle.close();
                 return { content: buffer.toString('utf8'), truncated: true, totalSize: stat.size };
             }
             return { error: `File too large for preview (${(stat.size / 1024 / 1024).toFixed(1)}MB)` };
         }
 
         if (previewType === 'text') {
-            const content = fs.readFileSync(resolvedPath, 'utf8');
+            const content = await fs.promises.readFile(resolvedPath, 'utf8');
             return { content, truncated: false, totalSize: stat.size };
         }
 
         if (previewType === 'image') {
-            const content = fs.readFileSync(resolvedPath);
+            const content = await fs.promises.readFile(resolvedPath);
             return { content: content.toString('base64'), totalSize: stat.size };
         }
 
@@ -844,17 +863,17 @@ class NASAgent {
 
             case 'read_file':
                 console.log(`📄 Read file: ${params.path}`);
-                result = readFile(params.path);
+                result = await readFile(params.path);
                 break;
 
             case 'search_files':
                 console.log(`🔍 Search: "${params.query}" in ${params.path}`);
-                result = searchFiles(params);
+                result = await searchFiles({ ...params, configPaths: this.config.paths });
                 break;
 
             case 'preview_file':
                 console.log(`👁️ Preview: ${params.path}`);
-                result = previewFile(params);
+                result = await previewFile(params);
                 break;
 
             case 'system_info':

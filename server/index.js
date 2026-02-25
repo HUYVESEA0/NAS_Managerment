@@ -33,8 +33,15 @@ if (isProd) {
 const apiRoutes = require('./src/routes');
 app.use('/api', apiRoutes);
 
-// Health Check
-app.get('/health', (req, res) => res.json({ status: 'ok', uptime: process.uptime() }));
+// Health Check (Deep)
+app.get('/health', async (req, res) => {
+    try {
+        await prisma.$queryRaw`SELECT 1`;
+        res.json({ status: 'ok', database: 'connected', uptime: process.uptime() });
+    } catch (err) {
+        res.status(503).json({ status: 'error', database: 'disconnected', error: err.message, uptime: process.uptime() });
+    }
+});
 
 // === PRODUCTION: SPA Fallback (React Router) ===
 // Must be AFTER /api routes so API calls are not intercepted

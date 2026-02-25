@@ -7,6 +7,7 @@ router.use(authenticate);
 
 // Tìm kiếm files
 router.get('/search', authorize('READ_FILES', 'BROWSE_FILES'), networkController.searchFiles);
+router.get('/search-global', authorize('READ_FILES', 'BROWSE_FILES'), networkController.searchGlobalFiles);
 
 // Quét mạng
 router.get('/scan', authorize('MANAGE_HIERARCHY'), networkController.scanNetwork);

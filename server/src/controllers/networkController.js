@@ -31,7 +31,7 @@ exports.searchFiles = async (req, res) => {
                     minSize: minSize ? parseInt(minSize) : null,
                     maxSize: maxSize ? parseInt(maxSize) : null,
                     type: type || 'all' // all, file, directory
-                }, 30000);
+                }, 180000); // Tăng timeout lên 3 phút cho deep search ổn định
 
                 return res.json(results);
             } catch (err) {
@@ -97,6 +97,73 @@ exports.searchFiles = async (req, res) => {
         }
 
         res.status(400).json({ error: 'No connection method available for this machine' });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
+/**
+ * Tìm kiếm Deep Search trên toàn bộ server (SSH hoặc Agent)
+ */
+exports.searchGlobalFiles = async (req, res) => {
+    try {
+        const { query, extensions, type } = req.query;
+        if (!query && !extensions) return res.status(400).json({ error: 'query or extensions is required' });
+
+        const machines = await prisma.machine.findMany();
+        const allResults = [];
+
+        await Promise.all(machines.map(async (machine) => {
+            try {
+                if (agentManager.isAgentConnected(machine.id)) {
+                    const results = await agentManager.sendRequest(machine.id, 'search_files', {
+                        path: '/', // Agent sẽ tự map '/' thành shared paths của nó
+                        query: query || '',
+                        extensions: extensions ? extensions.split(',') : [],
+                        type: type || 'all'
+                    }, 180000); // Tăng timeout lên 3 phút cho deep search ổn định
+
+                    results.forEach(r => allResults.push({ ...r, machineName: machine.name, machineId: machine.id }));
+                    return;
+                }
+
+                if (machine.ipAddress && machine.username && machine.password) {
+                    const sshConfig = { host: machine.ipAddress, port: machine.port || 22, username: machine.username, password: machine.password };
+                    let findCmd = `find /home /mnt /media /srv /var/www -maxdepth 5`;
+                    if (type === 'file') findCmd += ' -type f';
+                    if (query) findCmd += ` -iname "*${query}*"`;
+                    if (extensions) {
+                        const exts = extensions.split(',').map(e => `-iname "*.${e.trim()}"`).join(' -o ');
+                        findCmd += ` \\( ${exts} \\)`;
+                    }
+                    findCmd += ` 2>/dev/null | head -50`;
+
+                    const result = await sshService.execCommand(sshConfig, findCmd);
+                    if (!result.stdout.trim()) return;
+
+                    const paths = result.stdout.trim().split('\n').filter(Boolean);
+                    const detailCmd = paths.map(p => `stat --printf="%n|%s|%Y|%F\\n" "${p}" 2>/dev/null`).join('; ');
+                    const details = await sshService.execCommand(sshConfig, detailCmd);
+
+                    details.stdout.trim().split('\n').filter(Boolean).forEach(line => {
+                        const [filePath, size, mtime, fileType] = line.split('|');
+                        allResults.push({
+                            name: filePath.split('/').pop(),
+                            path: filePath,
+                            size: parseInt(size) || 0,
+                            modifiedAt: mtime ? new Date(parseInt(mtime) * 1000).toISOString() : null,
+                            isDirectory: fileType === 'directory',
+                            machineName: machine.name,
+                            machineId: machine.id
+                        });
+                    });
+                }
+            } catch (e) {
+                console.error(`Global search error on machine ${machine.id}:`, e.message);
+            } // Ignore individual machine errors
+        }));
+
+        res.json(allResults);
     } catch (error) {
         res.status(500).json({ error: error.message });
     }

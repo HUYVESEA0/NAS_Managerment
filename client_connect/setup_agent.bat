@@ -68,19 +68,21 @@ echo.
 echo  ================================================
 echo   NHAP THONG TIN KET NOI SERVER
 echo  ================================================
-echo.
-set /p SERVER_IP="  IP cua NAS Server (VD: 192.168.1.10): "
-set /p MACHINE_ID="  Machine ID (xem trong trang Admin): "
+echo  (Neu ban chay Agent tren cung may voi Server, dung: localhost)
+set /p SERVER_IP="  IP cua NAS Server (Default: localhost): "
+if "!SERVER_IP!"=="" set SERVER_IP=localhost
+
+set /p MACHINE_ID="  Machine ID (xem trong Dashboard): "
 
 echo.
 echo  [4/4] Dang ket noi va cau hinh...
 echo.
 node agent.js --setup --server ws://!SERVER_IP!:3001/ws/agent --machine-id !MACHINE_ID!
 
-if %errorlevel% neq 0 (
+if !errorlevel! neq 0 (
     echo.
     echo  [ERROR] Ket noi that bai!
-    echo  Kiem tra lai: IP Server, Machine ID, va ket noi mang.
+    echo  Kiem tra lai: IP Server (!SERVER_IP!), Machine ID (!MACHINE_ID!)
     pause
     exit /b
 )

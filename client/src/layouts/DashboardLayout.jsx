@@ -3,6 +3,7 @@ import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutDashboard, Server, Folder, Settings, Users, LogOut, Shield, ChevronDown, Globe, Wifi } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage, LANGUAGES } from '../contexts/LanguageContext';
+import CommandPalette from '../components/CommandPalette';
 
 // ── Language Selector Dropdown ──────────────────────────────────────────
 const LanguageSelector = ({ compact = false }) => {
@@ -277,6 +278,21 @@ const DashboardLayout = () => {
                     </div>
 
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {/* Global Search Hint */}
+                        <div
+                            style={{
+                                display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px',
+                                background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
+                                borderRadius: 7, fontSize: 12, color: 'var(--text-muted)',
+                                userSelect: 'none'
+                            }}
+                        >
+                            <span>Search...</span>
+                            <div style={{ padding: '2px 6px', background: 'var(--bg-hover)', borderRadius: 4, fontSize: 10, fontWeight: 600, fontFamily: "'Fira Code', monospace", border: '1px solid var(--border-subtle)' }}>
+                                Ctrl K
+                            </div>
+                        </div>
+
                         {/* Language Selector */}
                         <LanguageSelector />
 
@@ -299,6 +315,8 @@ const DashboardLayout = () => {
                     <Outlet />
                 </div>
             </main>
+
+            <CommandPalette />
         </div>
     );
 };
