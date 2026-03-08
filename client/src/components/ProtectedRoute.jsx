@@ -1,6 +1,7 @@
 import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useLanguage } from '../contexts/LanguageContext';
 
 /**
  * Protected Route wrapper
@@ -9,6 +10,7 @@ import { useAuth } from '../contexts/AuthContext';
  */
 const ProtectedRoute = ({ children, requirePermissions = [], requireAdmin = false }) => {
     const { isAuthenticated, loading, hasPermission, isAdmin } = useAuth();
+    const { t } = useLanguage();
     const location = useLocation();
 
     if (loading) {
@@ -16,7 +18,7 @@ const ProtectedRoute = ({ children, requirePermissions = [], requireAdmin = fals
             <div className="flex items-center justify-center h-screen bg-gray-100">
                 <div className="text-center">
                     <div className="w-12 h-12 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-                    <p className="text-gray-500">Checking authentication...</p>
+                    <p className="text-gray-500">{t('checkingAuth')}</p>
                 </div>
             </div>
         );
@@ -35,8 +37,8 @@ const ProtectedRoute = ({ children, requirePermissions = [], requireAdmin = fals
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
                         </svg>
                     </div>
-                    <h2 className="text-xl font-semibold text-gray-800 mb-2">Access Denied</h2>
-                    <p className="text-gray-500">You need admin privileges to access this page.</p>
+                    <h2 className="text-xl font-semibold text-gray-800 mb-2">{t('accessDenied')}</h2>
+                    <p className="text-gray-500">{t('needAdminPrivileges')}</p>
                 </div>
             </div>
         );
@@ -51,9 +53,9 @@ const ProtectedRoute = ({ children, requirePermissions = [], requireAdmin = fals
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                         </svg>
                     </div>
-                    <h2 className="text-xl font-semibold text-gray-800 mb-2">Insufficient Permissions</h2>
-                    <p className="text-gray-500">You don't have the required permissions to access this page.</p>
-                    <p className="text-xs text-gray-400 mt-2">Required: {requirePermissions.join(', ')}</p>
+                    <h2 className="text-xl font-semibold text-gray-800 mb-2">{t('insufficientPermissions')}</h2>
+                    <p className="text-gray-500">{t('noRequiredPermissions')}</p>
+                    <p className="text-xs text-gray-400 mt-2">{t('required')} {requirePermissions.join(', ')}</p>
                 </div>
             </div>
         );

@@ -1,5 +1,7 @@
 const WebSocket = require('ws');
 const prisma = require('./prisma');
+const notificationHub = require('./notificationHub');
+const { logActivity } = require('./activityService');
 
 /**
  * AgentManager - Quản lý kết nối WebSocket từ các agent remote
@@ -24,8 +26,10 @@ class AgentManager {
     /**
      * Khởi tạo WebSocket server gắn vào HTTP server
      */
-    init(server) {
-        this.wss = new WebSocket.Server({ server, path: '/ws/agent' });
+    init(wssInstance) {
+        if (wssInstance) {
+            this.wss = wssInstance;
+        }
 
         this.wss.on('connection', (ws, req) => {
             console.log('🔌 New agent connection from:', req.socket.remoteAddress);
@@ -116,6 +120,8 @@ class AgentManager {
 
         ws._agentInfo = agentInfo;
 
+        let configuredPaths = null;
+
         if (machine) {
             // Cập nhật machine status + SSH info nếu agent gửi lên
             const updateData = { status: 'online' };
@@ -143,9 +149,22 @@ class AgentManager {
                 data: updateData
             });
 
+            // Load sharedPaths từ DB và push xuống agent
+            const freshMachine = await prisma.machine.findUnique({ where: { id: machine.id } });
+            configuredPaths = freshMachine.sharedPaths
+                ? JSON.parse(freshMachine.sharedPaths)
+                : null;
+
             // Lưu agent connection theo machineId
             this.agents.set(machine.id, { ws, info: agentInfo });
             console.log(`✅ Agent registered for machine: ${machine.name} (ID: ${machine.id})`);
+
+            // Broadcast agent online event
+            notificationHub.broadcast('agent:online', {
+                machineId: machine.id,
+                machineName: machine.name
+            });
+            logActivity({ category: 'agent', action: 'connect', message: `Agent "${machine.name}" connected`, meta: { machineId: machine.id, hostname, platform } });
 
             if (sshInfo) {
                 console.log(`   SSH: ${sshInfo.available ? '✅ Available' : '❌ Not available'} (port ${sshInfo.port || 22})`);
@@ -160,7 +179,7 @@ class AgentManager {
             console.log(`✅ Unlinked agent registered: ${agentInfo.machineName} (temp: ${tempId})`);
         }
 
-        // Gửi xác nhận
+        // Gửi xác nhận + push configured paths nếu có
         this._sendToAgent(ws, {
             type: 'registered',
             data: {
@@ -168,7 +187,9 @@ class AgentManager {
                 serverTime: new Date().toISOString(),
                 message: machine
                     ? `Linked to machine: ${machine.name}`
-                    : 'Registered but not linked to any machine. Please set machineId.'
+                    : 'Registered but not linked to any machine. Please set machineId.',
+                // Push configured paths xuống agent (override agent-side paths)
+                configuredPaths: configuredPaths || null
             }
         });
     }
@@ -204,6 +225,10 @@ class AgentManager {
         const { machineId, machineName } = ws._agentInfo;
         console.log(`❌ Agent disconnected: ${machineName}`);
 
+        // Broadcast agent offline event
+        notificationHub.broadcast('agent:offline', { machineId, machineName });
+        logActivity({ level: 'warn', category: 'agent', action: 'disconnect', message: `Agent "${machineName}" disconnected`, meta: { machineId } });
+
         if (machineId) {
             this.agents.delete(machineId);
             // Cập nhật machine status = offline
@@ -224,6 +249,24 @@ class AgentManager {
                 }
             }
         }
+    }
+
+    /**
+     * Push updated paths to a connected agent at runtime
+     * @param {number} machineId
+     * @param {string[]} paths
+     */
+    pushPaths(machineId, paths) {
+        const agent = this.agents.get(machineId);
+        if (!agent || agent.ws.readyState !== 1) return false;
+        this._sendToAgent(agent.ws, {
+            type: 'update_paths',
+            data: { paths }
+        });
+        // Update in-memory info as well
+        agent.info.sharedPaths = paths;
+        console.log(`📂 Pushed paths to agent ${machineId}:`, paths);
+        return true;
     }
 
     /**

@@ -1,10 +1,10 @@
 {
-    "name": "nas-agent",
+    "name": "nas-client-connect",
     "version": "1.0.0",
-    "description": "NAS Manager Agent - Runs on remote machines to share directories",
-    "main": "agent.js",
+    "description": "NAS Manager Client Connect - Runs on remote machines to share directories",
+    "main": "client_connect.js",
     "scripts": {
-        "start": "node agent.js"
+        "start": "node client_connect.js"
     },
     "dependencies": {
         "ws": "^8.18.0"

@@ -5,57 +5,148 @@
 @tailwind utilities;
 
 /* =====================================
-   DESIGN TOKENS — NAS Manager Dark Theme
-   Enterprise Gateway / Navy Dark Mode
+   DESIGN TOKENS — NAS Manager (Hacker Grid Theme)
+   Light Theme (default) + Dark Theme
    ===================================== */
 
-:root {
-    --bg-base: #0B0F19;
-    /* Nền tối tĩnh mịch vòm trời đêm */
-    --bg-surface: #111827;
-    /* Cấp độ nổi đầu tiên, chuẩn Gray-900 Tailwind */
-    --bg-elevated: #1F2937;
-    /* Nổi cấp 2 (Card chính) Gray-800 */
-    --bg-card: #1F2937;
-    /* Bằng elevated */
-    --bg-hover: #374151;
-    /* Hover Gray-700 */
+@layer utilities {
+  .bg-grid-pattern {
+    background-size: 32px 32px;
+    background-image: 
+      linear-gradient(to right, var(--grid-line) 1px, transparent 1px),
+      linear-gradient(to bottom, var(--grid-line) 1px, transparent 1px);
+  }
+}
 
-    --border-subtle: rgba(255, 255, 255, 0.05);
-    --border-default: rgba(255, 255, 255, 0.08);
-    /* Viền mờ nhẹ nhàng */
-    --border-strong: rgba(255, 255, 255, 0.15);
+/* ── Light Theme (Tech Clean / Red Accent) ─────────────── */
+:root,
+html.light {
+    /* Backgrounds */
+    --bg-base: #F8FAFC;
+    --bg-surface: #FFFFFF;
+    --bg-elevated: #FFFFFF;
+    --bg-card: #FFFFFF;
+    --bg-hover: #F1F5F9;
 
-    --text-primary: #F9FAFB;
-    /* Trắng ngà dễ đọc, Gray-50 */
-    --text-secondary: #9CA3AF;
-    /* Xám bạc dịu mắt, Gray-400 */
-    --text-muted: #6B7280;
-    /* Xám nhạt hơn, Gray-500 */
+    /* Grid pattern */
+    --grid-line: rgba(0, 0, 0, 0.02);
 
-    --accent-blue: #2563EB;
-    /* Xanh dương đậm đà, chuẩn corporate (Blue-600) */
-    --accent-cyan: #3B82F6;
-    /* Xanh dương lai chút tươi sáng (Blue-500) */
-    --accent-glow: rgba(37, 99, 235, 0.15);
-    /* Ánh sáng bao quanh Blue-600 */
+    /* Borders */
+    --border-subtle: #E2E8F0;
+    --border-default: #CBD5E1; 
+    --border-strong: #94A3B8;
 
-    --success: #059669;
-    /* Xanh ngọc lục bảo trưởng thành (Emerald-600) */
-    --warning: #D97706;
-    /* Vàng cam dịu bớt (Amber-600) */
-    --danger: #DC2626;
-    /* Đỏ gạch chuyên nghiệp (Red-600) */
+    /* Text */
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-muted: #94A3B8;
 
+    /* Accent - Red */
+    --accent-blue: #DC2626; /* primary accent mapped to red */
+    --accent-cyan: #EF4444; /* secondary red */
+    --accent-glow: rgba(220, 38, 38, 0.15);
+
+    /* Accent states (for inline styles) */
+    --accent-gradient: linear-gradient(135deg, #DC2626, #EF4444);
+    --accent-gradient-90: linear-gradient(90deg, #DC2626, #EF4444);
+    --accent-shadow: 0 2px 8px rgba(220, 38, 38, 0.25);
+    --accent-bg-subtle: rgba(220, 38, 38, 0.08);
+    --accent-bg-light: rgba(220, 38, 38, 0.1);
+    --accent-bg-medium: rgba(220, 38, 38, 0.12);
+    --accent-bg-strong: rgba(220, 38, 38, 0.15);
+    --accent-border-light: rgba(220, 38, 38, 0.2);
+    --accent-border-medium: rgba(220, 38, 38, 0.25);
+    --accent-border-strong: rgba(220, 38, 38, 0.3);
+    --accent-focus-ring: 0 0 0 3px rgba(220, 38, 38, 0.1);
+
+    /* Active nav */
+    --nav-active-bg: rgba(220, 38, 38, 0.06); 
+    --nav-active-text: #DC2626; 
+    --nav-active-border: #DC2626;
+    --nav-active-indicator: #DC2626;
+
+    /* Semantic */
+    --success: #10B981;
+    --warning: #F59E0B;
+    --danger: #EF4444;
+
+    /* Shape */
     --radius-sm: 4px;
-    --radius-md: 8px;
-    /* Trông vuông vức chuyên nghiệp hơn một chút so với 10px */
-    --radius-lg: 12px;
-    --radius-xl: 16px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
 
-    --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
-    --shadow-glow: 0 0 15px rgba(37, 99, 235, 0.1);
-    --shadow-elevated: 0 10px 15px -3px rgba(0, 0, 0, 0.4), 0 4px 6px -2px rgba(0, 0, 0, 0.2);
+    /* Shadows */
+    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+    --shadow-glow: none;
+    --shadow-elevated: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+
+    color-scheme: light;
+}
+
+/* ── Dark Theme (Normal Dark) ────────────────────────── */
+html.dark {
+    /* Backgrounds */
+    --bg-base: #0F172A;
+    --bg-surface: #1E293B;
+    --bg-elevated: #334155;
+    --bg-card: #1E293B;
+    --bg-hover: #334155;
+
+    /* Grid pattern */
+    --grid-line: rgba(255, 255, 255, 0.05);
+
+    /* Borders */
+    --border-subtle: #334155;
+    --border-default: #475569;
+    --border-strong: #64748B;
+
+    /* Text */
+    --text-primary: #F8FAFC;
+    --text-secondary: #CBD5E1;
+    --text-muted: #94A3B8;
+
+    /* Accent */
+    --accent-blue: #EF4444;
+    --accent-cyan: #F87171;
+    --accent-glow: rgba(239, 68, 68, 0.15);
+
+    /* Accent states (for inline styles) */
+    --accent-gradient: linear-gradient(135deg, #EF4444, #F87171);
+    --accent-gradient-90: linear-gradient(90deg, #EF4444, #F87171);
+    --accent-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
+    --accent-bg-subtle: rgba(239, 68, 68, 0.08);
+    --accent-bg-light: rgba(239, 68, 68, 0.1);
+    --accent-bg-medium: rgba(239, 68, 68, 0.12);
+    --accent-bg-strong: rgba(239, 68, 68, 0.15);
+    --accent-border-light: rgba(239, 68, 68, 0.2);
+    --accent-border-medium: rgba(239, 68, 68, 0.25);
+    --accent-border-strong: rgba(239, 68, 68, 0.3);
+    --accent-focus-ring: 0 0 0 3px rgba(239, 68, 68, 0.1);
+
+    /* Active nav */
+    --nav-active-bg: rgba(239, 68, 68, 0.1);
+    --nav-active-text: #EF4444;
+    --nav-active-border: #EF4444;
+    --nav-active-indicator: #EF4444;
+
+    /* Semantic */
+    --success: #10B981;
+    --warning: #F59E0B;
+    --danger: #EF4444;
+
+    /* Shape */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 12px;
+
+    /* Shadows */
+    --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.2);
+    --shadow-glow: 0 0 15px rgba(239, 68, 68, 0.15);
+    --shadow-elevated: 0 4px 6px -1px rgba(0, 0, 0, 0.3), 0 2px 4px -1px rgba(0, 0, 0, 0.2);
+
+    color-scheme: dark;
 }
 
 /* =====================================
@@ -71,14 +162,17 @@
 html {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Smooth theme switch */
+    transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 body {
     background-color: var(--bg-base);
     color: var(--text-primary);
-    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-family: 'Fira Code', 'Inter', system-ui, -apple-system, monospace;
     font-size: 14px;
     line-height: 1.6;
+    transition: background-color 0.25s ease, color 0.25s ease;
 }
 
 /* =====================================
@@ -95,12 +189,27 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: rgba(128, 128, 128, 0.18);
     border-radius: 10px;
 }
 
-::-webkit-scrollbar-thumb:hover {
+/* Dark mode scrollbar */
+html.dark ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+}
+
+html.dark ::-webkit-scrollbar-thumb:hover {
     background: rgba(59, 130, 246, 0.4);
+}
+
+/* Light mode scrollbar */
+html.light ::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-thumb {
+    background: rgba(15, 23, 42, 0.12);
+}
+
+html.light ::-webkit-scrollbar-thumb:hover {
+    background: rgba(37, 99, 235, 0.3);
 }
 
 /* =====================================
@@ -251,6 +360,55 @@ a,
     cursor: pointer;
 }
 
+/* Global hover feedback for buttons & interactive elements */
+button:not([disabled]):hover,
+[role="button"]:not([disabled]):hover {
+    filter: brightness(0.97);
+}
+
+html.dark button:not([disabled]):hover,
+html.dark [role="button"]:not([disabled]):hover {
+    filter: brightness(1.1);
+}
+
+/* Active (pressed) feedback — subtle scale + darken */
+button:not([disabled]):active,
+[role="button"]:not([disabled]):active {
+    transform: scale(0.98);
+    filter: brightness(0.93);
+}
+
+html.dark button:not([disabled]):active,
+html.dark [role="button"]:not([disabled]):active {
+    transform: scale(0.98);
+    filter: brightness(1.15);
+}
+
+/* --- Nav link utility class --- */
+.nav-link {
+    cursor: pointer;
+    position: relative;
+}
+.nav-link:hover {
+    background: var(--bg-hover) !important;
+    color: var(--text-primary) !important;
+}
+.nav-link.active {
+    background: var(--nav-active-bg) !important;
+    color: var(--nav-active-text) !important;
+    border-color: var(--nav-active-border) !important;
+}
+
+/* --- Clickable row utility --- */
+.clickable-row {
+    cursor: pointer;
+    transition: background-color 0.15s, border-color 0.15s;
+}
+.clickable-row:hover {
+    background: var(--bg-hover);
+    border-color: var(--border-default);
+}
+
 /* Focus visible ring */
 *:focus-visible {
     outline: 2px solid var(--accent-blue);
@@ -264,7 +422,7 @@ a,
 input,
 select,
 [role="button"] {
-    transition: color 0.15s, background-color 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
+    transition: color 0.15s, background-color 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s, transform 0.1s, filter 0.15s;
 }
 
 /* =====================================
@@ -305,6 +463,34 @@ textarea:focus {
     color: white;
 }
 
+html.light ::selection {
+    background: rgba(37, 99, 235, 0.25);
+    color: #0F172A;
+}
+
+/* =====================================
+   LIGHT THEME — EXTRA INTERACTIVE POLISH
+   ===================================== */
+
+/* Stronger card hover in light mode */
+html.light .card:hover {
+    border-color: rgba(15, 23, 42, 0.20);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.12), var(--shadow-glow);
+}
+
+/* Links — underline on hover in light mode for clarity */
+html.light a:hover {
+    text-decoration-color: var(--accent-blue);
+}
+
+/* Input focus glow — slightly stronger in light */
+html.light input:focus,
+html.light select:focus,
+html.light textarea:focus {
+    border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
 /* =====================================
    REDUCED MOTION
    ===================================== */
@@ -317,4 +503,10 @@ textarea:focus {
         animation-duration: 0.01ms !important;
         transition-duration: 0.01ms !important;
     }
+}
+
+/* Toast Notification Animations */
+@keyframes slideInRight {
+    from { opacity: 0; transform: translateX(40px); }
+    to { opacity: 1; transform: translateX(0); }
 }

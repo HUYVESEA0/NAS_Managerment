@@ -176,38 +176,58 @@ exports.scanNetwork = async (req, res) => {
     try {
         const { subnet } = req.query;
 
-        // Tự detect subnet nếu không được chỉ định
-        let targetSubnet = subnet;
-        if (!targetSubnet) {
+        // Xử lý các dải mạng (subnets) liên tiếp
+        let targetSubnets = [];
+
+        if (subnet) {
+            const parts = subnet.split(',').map(s => s.trim()).filter(Boolean);
+            for (let p of parts) {
+                // Remove trailing /24 or .0/24 or .x to get the base "192.168.1"
+                let base = p;
+                if (base.endsWith('.0/24')) base = base.substring(0, base.length - 5);
+                else if (base.endsWith('/24')) base = base.substring(0, base.length - 3);
+                else if (base.endsWith('.x') || base.endsWith('.X')) base = base.substring(0, base.length - 2);
+
+                if (base.includes('-')) {
+                    // e.g. "192.168.1-5" 
+                    const dashMatch = base.match(/^(\d+\.\d+\.)(\d+)\s*-\s*(\d+)$/);
+                    if (dashMatch) {
+                        const prefix = dashMatch[1];
+                        const start = parseInt(dashMatch[2]);
+                        const end = parseInt(dashMatch[3]);
+                        if (start <= end && end - start <= 20) {
+                            for (let i = start; i <= end; i++) targetSubnets.push(`${prefix}${i}`);
+                        } else {
+                            targetSubnets.push(base);
+                        }
+                    } else {
+                        targetSubnets.push(base);
+                    }
+                } else {
+                    targetSubnets.push(base);
+                }
+            }
+        } else {
+            // Tự detect TẤT CẢ subnets từ các card mạng (liên dải mạng LAN hiện có)
             const nets = os.networkInterfaces();
-            // Ưu tiên 192.168.x.x, sau đó đến 10.x.x.x, rồi 172.x.x.x
             const candidates = [];
             for (const name of Object.keys(nets)) {
                 for (const net of nets[name]) {
                     if (net.family === 'IPv4' && !net.internal) {
-                        candidates.push(net.address);
+                        const parts = net.address.split('.');
+                        candidates.push(`${parts[0]}.${parts[1]}.${parts[2]}`);
                     }
                 }
             }
-
-            // Sort ưu tiên
-            candidates.sort((a, b) => {
-                if (a.startsWith('192.168')) return -1;
-                if (b.startsWith('192.168')) return 1;
-                if (a.startsWith('10.')) return -1;
-                if (b.startsWith('10.')) return 1;
-                return 0;
-            });
-
-            if (candidates.length > 0) {
-                const parts = candidates[0].split('.');
-                targetSubnet = `${parts[0]}.${parts[1]}.${parts[2]}`;
-            }
+            targetSubnets = [...new Set(candidates)];
         }
 
-        if (!targetSubnet) {
-            return res.status(400).json({ error: 'Could not detect network subnet' });
+        if (targetSubnets.length === 0) {
+            return res.status(400).json({ error: 'Could not detect any network subnets' });
         }
+
+        // Đảm bảo unique subnets
+        targetSubnets = [...new Set(targetSubnets)];
 
         // Lấy machines đã có trong DB
         const existingMachines = await prisma.machine.findMany({
@@ -215,27 +235,61 @@ exports.scanNetwork = async (req, res) => {
         });
         const existingIPs = new Set(existingMachines.map(m => m.ipAddress));
 
+        // Cấu hình Mock (Giả lập mạng để test)
+        const isMockMode = String(process.env.MOCK_NETWORK).trim() === 'true';
+        const mockIPs = [];
+        if (isMockMode) {
+            // Đồng bộ với cấu hình từ simulate_network.js
+            const MOCK_NETWORKS = [
+                { base: '192.168.1', count: 5, start: 100 },
+                { base: '192.168.2', count: 3, start: 50 },
+                { base: '10.0.0', count: 8, start: 10 },
+                { base: '172.16.5', count: 4, start: 200 }
+            ];
+            MOCK_NETWORKS.forEach(net => {
+                for (let i = 0; i < net.count; i++) {
+                    mockIPs.push(`${net.base}.${net.start + i}`);
+                }
+            });
+        }
+
         // Hàm ping bất đồng bộ
         const platform = os.platform();
         const pingHost = (ip) => {
             return new Promise((resolve) => {
+                // NẾU BẬT MOCK NETWORK: Tự động trả về TRUE cho các IP nằm trong danh sách giả lập
+                if (isMockMode) {
+                    if (mockIPs.includes(ip)) {
+                        return resolve({ ip, online: true });
+                    }
+                    // Tăng tốc độ bằng cách giả lập offline ngay lập tức cho các IP khác
+                    return resolve({ ip, online: false });
+                }
+
                 const cmd = platform === 'win32'
                     ? `ping -n 1 -w 200 ${ip}` // Fast ping
                     : `ping -c 1 -W 1 ${ip}`;
 
-                exec(cmd, (error) => {
+                exec(cmd, { windowsHide: true }, (error) => {
                     resolve({ ip, online: !error });
                 });
             });
         };
 
-        // 1. Quét Ping (Batch Processing)
+        // 1. Quét Ping (Batch Processing) cho TẤT CẢ CÁC SUBNETS
         const pingResults = [];
         const ipList = [];
-        for (let i = 1; i <= 254; i++) ipList.push(`${targetSubnet}.${i}`);
 
-        // Limit concurrency to 25
-        const BATCH_SIZE = 25;
+        targetSubnets.forEach(sub => {
+            for (let i = 1; i <= 254; i++) ipList.push(`${sub}.${i}`);
+        });
+
+        if (ipList.length > 5000) {
+            return res.status(400).json({ error: 'Too many IPs to scan. Please narrow down your subnet ranges.' });
+        }
+
+        // Limit concurrency to 50
+        const BATCH_SIZE = 50;
         for (let i = 0; i < ipList.length; i += BATCH_SIZE) {
             const batch = ipList.slice(i, i + BATCH_SIZE);
             const batchResults = await Promise.all(batch.map(ip => pingHost(ip)));
@@ -255,14 +309,19 @@ exports.scanNetwork = async (req, res) => {
 
                 // Check SSH
                 try {
-                    sshOpen = await new Promise((resolve) => {
-                        const socket = new net.Socket();
-                        socket.setTimeout(600);
-                        socket.on('connect', () => { socket.destroy(); resolve(true); });
-                        socket.on('error', () => { socket.destroy(); resolve(false); });
-                        socket.on('timeout', () => { socket.destroy(); resolve(false); });
-                        socket.connect(22, ip);
-                    });
+                    if (isMockMode && mockIPs.includes(ip)) {
+                        // Giả lập 60% thiết bị mở cổng SSH
+                        sshOpen = Math.random() > 0.4;
+                    } else {
+                        sshOpen = await new Promise((resolve) => {
+                            const socket = new net.Socket();
+                            socket.setTimeout(600);
+                            socket.on('connect', () => { socket.destroy(); resolve(true); });
+                            socket.on('error', () => { socket.destroy(); resolve(false); });
+                            socket.on('timeout', () => { socket.destroy(); resolve(false); });
+                            socket.connect(22, ip);
+                        });
+                    }
                 } catch { sshOpen = false; }
 
                 // Hostname Resolution Strategy:
@@ -271,7 +330,7 @@ exports.scanNetwork = async (req, res) => {
                 if (!hostname && platform === 'win32') {
                     try {
                         await new Promise((resolve) => {
-                            exec(`ping -a -n 1 -w 200 ${ip}`, { timeout: 1000 }, (err, stdout) => {
+                            exec(`ping -a -n 1 -w 200 ${ip}`, { timeout: 1000, windowsHide: true }, (err, stdout) => {
                                 if (!err && stdout) {
                                     // Output format: "Pinging HOSTNAME [IP] with..."
                                     const match = stdout.match(/Pinging\s+([^\s\[]+)\s+\[/);
@@ -292,10 +351,10 @@ exports.scanNetwork = async (req, res) => {
                 }
 
                 // 3. Windows NetBIOS (Fallback) - Strict Mode for UNIQUE names
-                if (!hostname && platform === 'win32') {
+                if (!hostname && platform === 'win32' && !isMockMode) {
                     try {
                         await new Promise((resolve) => {
-                            exec(`nbtstat -A ${ip}`, { timeout: 1500 }, (err, stdout) => {
+                            exec(`nbtstat -A ${ip}`, { timeout: 1500, windowsHide: true }, (err, stdout) => {
                                 if (!err && stdout) {
                                     // Look for: "NAME   <00>  UNIQUE"
                                     const lines = stdout.split('\n');
@@ -313,6 +372,10 @@ exports.scanNetwork = async (req, res) => {
                             });
                         });
                     } catch { }
+                }
+
+                if (isMockMode && !hostname && mockIPs.includes(ip)) {
+                    hostname = `Mock-Device-${ip.split('.').pop()}`;
                 }
 
                 const existingMachine = existingMachines.find(m => m.ipAddress === ip);
@@ -346,7 +409,7 @@ exports.scanNetwork = async (req, res) => {
         });
 
         res.json({
-            subnet: targetSubnet,
+            subnet: targetSubnets.join(', '),
             totalOnline: devices.length,
             devices
         });

@@ -26,6 +26,8 @@ server/prisma/*.db
 # ========================
 client/dist/
 client/dist-ssr/
+SERVER_PACKAGE/
+CLIENT_CONNECT_PACKAGE/
 
 # ========================
 # Logs

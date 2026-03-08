@@ -1,6 +1,7 @@
 const prisma = require('../utils/prisma');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const { logActivity } = require('../utils/activityService');
 
 const SECRET_KEY = process.env.JWT_SECRET || 'secret_dev_key';
 
@@ -23,8 +24,11 @@ exports.login = async (req, res) => {
 
         const valid = await bcrypt.compare(password, user.password);
         if (!valid) {
+            logActivity({ level: 'warn', category: 'auth', action: 'login_failed', message: `Login failed for user "${username}"`, ipAddress: req.ip });
             return res.status(401).json({ error: 'Invalid credentials' });
         }
+
+        logActivity({ level: 'info', category: 'auth', action: 'login', message: `User "${username}" logged in`, userId: user.id, ipAddress: req.ip });
 
         const token = jwt.sign(
             { userId: user.id, roleId: user.roleId },

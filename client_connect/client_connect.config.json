@@ -1,0 +1,11 @@
+{
+    "server":  "ws://localhost:3001/ws/agent",
+    "machineId":  1,
+    "paths":  [
+                  "C:\\ER\\NAS_Managerment\\client_connect"
+              ],
+    "name":  "HUYVIESEA",
+    "sshUser":  null,
+    "sshPass":  null,
+    "sshPort":  22
+}

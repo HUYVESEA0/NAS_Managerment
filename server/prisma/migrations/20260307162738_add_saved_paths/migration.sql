@@ -1,0 +1,13 @@
+-- CreateTable
+CREATE TABLE "SavedPath" (
+    "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    "label" TEXT NOT NULL,
+    "path" TEXT NOT NULL,
+    "machineId" INTEGER,
+    "userId" INTEGER NOT NULL,
+    "color" TEXT,
+    "sortOrder" INTEGER NOT NULL DEFAULT 0,
+    "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" DATETIME NOT NULL,
+    CONSTRAINT "SavedPath_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User" ("id") ON DELETE RESTRICT ON UPDATE CASCADE
+);

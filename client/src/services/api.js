@@ -1,5 +1,15 @@
 import axios from 'axios';
 
+// Lấy base url tuỳ theo môi trường
+export const getApiUrl = () => {
+    // Nếu chạy trực tiếp từ vite (localhost:5173), dùng host hiện tại đổi port 3001
+    // Nếu chạy build prod, dùng window.location.origin
+    if (import.meta.env.DEV) {
+        return `http://${window.location.hostname}:3001`;
+    }
+    return window.location.origin;
+};
+
 const api = axios.create({
     baseURL: '/api'
 });

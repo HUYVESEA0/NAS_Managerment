@@ -5,6 +5,9 @@ const { authenticate, authorize } = require('../middleware/auth');
 
 router.use(authenticate);
 
+// Tổng quan trạng thái agents + local spawner
+router.get('/summary', agentController.getAgentsSummary);
+
 // Lấy danh sách agents đang kết nối
 router.get('/', agentController.getConnectedAgents);
 
@@ -13,5 +16,8 @@ router.get('/status/:machineId', agentController.getAgentStatus);
 
 // Lấy setup instructions cho machine
 router.get('/setup/:machineId', authorize('MANAGE_HIERARCHY'), agentController.getAgentSetup);
+
+// Cập nhật shared paths cho machine (admin only)
+router.put('/paths/:machineId', authorize('MANAGE_HIERARCHY'), agentController.updateSharedPaths);
 
 module.exports = router;

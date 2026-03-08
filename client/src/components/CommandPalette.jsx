@@ -6,11 +6,11 @@ import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
 
 const STATIC_PAGES = [
-    { id: 'p1', type: 'page', name: 'Dashboard Overview', path: '/', icon: LayoutDashboard },
-    { id: 'p2', type: 'page', name: 'File Explorer', path: '/files', icon: FolderOpen },
-    { id: 'p3', type: 'page', name: 'Network Scanner', path: '/network', icon: Wifi },
-    { id: 'p4', type: 'page', name: 'Infrastructure Admin', path: '/admin', icon: Settings },
-    { id: 'p5', type: 'page', name: 'User Management', path: '/users', icon: Users },
+    { id: 'p1', type: 'page', nameKey: 'dashboardOverview', path: '/', icon: LayoutDashboard },
+    { id: 'p2', type: 'page', nameKey: 'fileExplorer', path: '/files', icon: FolderOpen },
+    { id: 'p3', type: 'page', nameKey: 'networkScanner', path: '/network', icon: Wifi },
+    { id: 'p4', type: 'page', nameKey: 'infrastructure', path: '/admin', icon: Settings },
+    { id: 'p5', type: 'page', nameKey: 'userManagement', path: '/users', icon: Users },
 ];
 
 const FILE_ICONS = {
@@ -108,7 +108,7 @@ const CommandPalette = () => {
 
         const q = query.toLowerCase();
 
-        let pages = STATIC_PAGES.filter(p => p.name.toLowerCase().includes(q));
+        let pages = STATIC_PAGES.filter(p => t(p.nameKey).toLowerCase().includes(q)).map(p => ({ ...p, name: t(p.nameKey) }));
         let machs = machines.filter(m =>
             m.name.toLowerCase().includes(q) ||
             (m.ipAddress && m.ipAddress.toLowerCase().includes(q))
@@ -116,12 +116,12 @@ const CommandPalette = () => {
 
         let actions = [];
         if ('log out'.includes(q) || 'sign out'.includes(q)) {
-            actions.push({ id: 'a1', type: 'action', name: 'Log Out', action: 'logout', icon: LogOut });
+            actions.push({ id: 'a1', type: 'action', name: t('logOut'), action: 'logout', icon: LogOut });
         }
 
         // Add deep search trigger if query is long enough
         if (q.length >= 2) {
-            actions.push({ id: 'a2', type: 'action', name: `Deep Search Files for "${query}"`, action: 'deep_search', icon: FileSearch });
+            actions.push({ id: 'a2', type: 'action', name: `${t('deepSearchFiles')} "${query}"`, action: 'deep_search', icon: FileSearch });
         }
 
         return [...pages, ...machs, ...actions];
@@ -200,7 +200,7 @@ const CommandPalette = () => {
                     onMouseEnter={() => setSelectedIndex(idx)}
                     style={{
                         display: 'flex', alignItems: 'center', padding: '12px 20px',
-                        cursor: 'pointer', background: isSelected ? 'rgba(59,130,246,0.1)' : 'transparent',
+                        cursor: 'pointer', background: isSelected ? 'var(--accent-bg-light)' : 'transparent',
                         borderLeft: `3px solid ${isSelected ? 'var(--accent-blue)' : 'transparent'}`,
                         transition: 'all 0.1s'
                     }}
@@ -232,7 +232,7 @@ const CommandPalette = () => {
                 onMouseEnter={() => setSelectedIndex(idx)}
                 style={{
                     display: 'flex', alignItems: 'center', padding: '12px 20px',
-                    cursor: 'pointer', background: isSelected ? 'rgba(59,130,246,0.1)' : 'transparent',
+                    cursor: 'pointer', background: isSelected ? 'var(--accent-bg-light)' : 'transparent',
                     borderLeft: `3px solid ${isSelected ? 'var(--accent-blue)' : 'transparent'}`,
                     transition: 'all 0.1s'
                 }}
@@ -255,13 +255,13 @@ const CommandPalette = () => {
                         </div>
                     )}
                     {item.type === 'page' && (
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>Navigation Shortcut</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('navigationShortcut')}</div>
                     )}
                     {item.type === 'action' && item.action === 'logout' && (
-                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>System Command</div>
+                        <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>{t('systemCommand')}</div>
                     )}
                     {item.type === 'action' && item.action === 'deep_search' && (
-                        <div style={{ fontSize: 12, color: 'var(--accent-cyan)' }}>Search across all interconnected servers</div>
+                        <div style={{ fontSize: 12, color: 'var(--accent-cyan)' }}>{t('searchAcrossServers')}</div>
                     )}
                 </div>
 
@@ -302,7 +302,7 @@ const CommandPalette = () => {
                     <input
                         ref={inputRef}
                         type="text"
-                        placeholder={isDeepSearching ? "Search globally..." : "Search machines, pages, or commands..."}
+                        placeholder={isDeepSearching ? t('searchGlobally') : t('searchMachinesPages')}
                         value={query}
                         onChange={(e) => {
                             setQuery(e.target.value);
@@ -322,7 +322,7 @@ const CommandPalette = () => {
                     {isDeepSearching && (
                         <div style={{ display: 'flex', alignItems: 'center', padding: '4px 10px', background: 'var(--bg-elevated)', borderRadius: 20, fontSize: 11, color: 'var(--text-secondary)', marginRight: 12 }}>
                             <span style={{ display: 'inline-block', width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-cyan)', marginRight: 6 }} className="pulse-dot"></span>
-                            Global File Scope
+                            {t('globalFileScope')}
                         </div>
                     )}
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-elevated)', padding: '2px 6px', borderRadius: 4, border: '1px solid var(--border-subtle)' }}>ESC</div>
@@ -334,13 +334,13 @@ const CommandPalette = () => {
                     {isDeepSearchLoading ? (
                         <div style={{ padding: '40px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)' }}>
                             <Loader2 size={24} className="animate-spin" style={{ color: 'var(--accent-cyan)', marginBottom: 12 }} />
-                            <div style={{ fontSize: 13, fontWeight: 500 }}>Scanning entire infrastructure...</div>
-                            <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4 }}>This might take a few moments depending on network latency.</div>
+                            <div style={{ fontSize: 13, fontWeight: 500 }}>{t('scanningInfrastructure')}</div>
+                            <div style={{ fontSize: 11, opacity: 0.7, marginTop: 4 }}>{t('thisCouldTakeAMoment')}</div>
                         </div>
                     ) : (
                         filteredItems.length === 0 ? (
                             <div style={{ padding: '32px 20px', textAlign: 'center', color: 'var(--text-muted)', fontSize: 13 }}>
-                                No results found matching "{query}"
+                                {t('noResultsFound')} "{query}"
                             </div>
                         ) : (
                             filteredItems.map((item, idx) => renderItem(item, idx))
@@ -351,16 +351,16 @@ const CommandPalette = () => {
                 {/* Footer hints */}
                 <div style={{ padding: '8px 20px', background: 'var(--bg-elevated)', borderTop: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', gap: 16 }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)' }}>
-                        <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>↑↓</span> to navigate
+                        <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>↑↓</span> {t('toNavigate')}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)' }}>
-                        <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Enter</span> to select
+                        <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Enter</span> {t('toSelect')}
                     </div>
                     {isDeepSearching && (
                         <>
                             <div style={{ width: 1, height: 12, background: 'var(--border-strong)' }}></div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: 'var(--text-muted)' }}>
-                                <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>ESC / Backspace</span> to cancel Deep Search
+                                <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>ESC / Backspace</span> {t('toCancelDeepSearch')}
                             </div>
                         </>
                     )}

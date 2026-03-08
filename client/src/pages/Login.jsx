@@ -1,8 +1,21 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { useLanguage, LANGUAGES } from '../contexts/LanguageContext';
-import { Server, Eye, EyeOff, LogIn, AlertCircle, Shield } from 'lucide-react';
+import { useLanguage } from '../contexts/LanguageContext';
+import { Terminal, Lock, User, Eye, EyeOff, Shield, Server, ArrowRight, Loader2 } from 'lucide-react';
+import ThemeToggle from '../components/ThemeToggle';
+
+// ── Background Effects ──
+const BackgroundMatrix = () => {
+    return (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none opacity-20">
+             {/* Tech grid/network background hints */}
+             <div className="absolute inset-0 bg-stripes opacity-10"></div>
+             <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-accent/5 rounded-full blur-[100px]"></div>
+             <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-primary/5 rounded-full blur-[100px]"></div>
+        </div>
+    );
+};
 
 const Login = () => {
     const [username, setUsername] = useState('');
@@ -10,341 +23,184 @@ const Login = () => {
     const [showPassword, setShowPassword] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
-
-    const { login } = useAuth();
+    const [sysInfo, setSysInfo] = useState([]);
+    
     const navigate = useNavigate();
     const location = useLocation();
-    const from = location.state?.from?.pathname || '/';
+    const { login } = useAuth();
+    const { t } = useLanguage();
 
-    const handleOperatorLogin = async () => {
-        setError('');
-        setLoading(true);
-        try {
-            await login('operator', 'operator123');
-            navigate(from, { replace: true });
-        } catch (err) {
-            setError(err.response?.data?.error || t('loginFailed') || 'Login failed');
-        } finally {
-            setLoading(false);
-        }
-    };
+    // Easter egg/Terminal effect text
+    useEffect(() => {
+        const messages = [
+            t('initSystemBoot'),
+            t('loadingSecureKernel'),
+            t('mountingFileSystems'),
+            t('establishingEncryption'),
+            t('systemReady')
+        ];
+        
+        let index = 0;
+        const interval = setInterval(() => {
+            if (index < messages.length) {
+                setSysInfo(prev => [...prev, messages[index]]);
+                index++;
+            } else {
+                clearInterval(interval);
+            }
+        }, 150);
+        return () => clearInterval(interval);
+    }, [t]);
+
+    const from = location.state?.from?.pathname || "/";
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setError('');
         setLoading(true);
 
-        const loginUser = username.trim() || 'operator';
-        const loginPass = password || 'operator123';
-
         try {
-            await login(loginUser, loginPass);
-            navigate(from, { replace: true });
+            const success = await login(username, password);
+            if (success) {
+                navigate(from, { replace: true });
+            } else {
+                setError(t('invalidCredentials'));
+            }
         } catch (err) {
-            setError(err.response?.data?.error || t('loginFailed') || 'Login failed');
+            setError(t('systemError'));
         } finally {
             setLoading(false);
         }
     };
 
-    const S = {
-        page: {
-            minHeight: '100vh',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            background: 'var(--bg-base)',
-            position: 'relative',
-            overflow: 'hidden',
-            padding: '24px',
-        },
-        // Subtle grid pattern background
-        bgGrid: {
-            position: 'absolute', inset: 0, pointerEvents: 'none',
-            backgroundImage: 'radial-gradient(rgba(59,130,246,0.06) 1px, transparent 1px)',
-            backgroundSize: '36px 36px',
-        },
-        // Soft glow blobs
-        glow1: {
-            position: 'absolute', top: '-10%', right: '-5%',
-            width: 400, height: 400,
-            background: 'radial-gradient(circle, rgba(59,130,246,0.08) 0%, transparent 70%)',
-            pointerEvents: 'none',
-        },
-        glow2: {
-            position: 'absolute', bottom: '-10%', left: '-5%',
-            width: 500, height: 500,
-            background: 'radial-gradient(circle, rgba(6,182,212,0.06) 0%, transparent 70%)',
-            pointerEvents: 'none',
-        },
-        // Card container
-        wrap: {
-            position: 'relative', zIndex: 10,
-            width: '100%', maxWidth: 400,
-        },
-        // Top logo section
-        logoWrap: { textAlign: 'center', marginBottom: 28 },
-        logoBox: {
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 64, height: 64, borderRadius: 16,
-            background: 'linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%)',
-            boxShadow: '0 8px 24px rgba(59,130,246,0.35)',
-            marginBottom: 16, cursor: 'default',
-            transition: 'transform 0.2s',
-        },
-        title: {
-            fontFamily: "'Fira Code', monospace",
-            fontSize: 24, fontWeight: 700,
-            color: 'var(--text-primary)',
-            letterSpacing: '-0.03em',
-            marginBottom: 6,
-        },
-        subtitle: { fontSize: 13, color: 'var(--text-muted)' },
-        // Main form card
-        card: {
-            background: 'var(--bg-elevated)',
-            border: '1px solid var(--border-default)',
-            borderRadius: 16,
-            padding: '28px 28px 24px',
-            boxShadow: '0 16px 48px rgba(0,0,0,0.4)',
-            marginBottom: 14,
-        },
-        label: {
-            display: 'block', fontSize: 12, fontWeight: 600,
-            color: 'var(--text-secondary)', marginBottom: 7,
-            textTransform: 'uppercase', letterSpacing: '0.06em',
-        },
-        inputWrap: { position: 'relative', marginBottom: 18 },
-        input: {
-            width: '100%', padding: '10px 14px',
-            background: 'var(--bg-hover)',
-            border: '1px solid var(--border-default)',
-            borderRadius: 10, fontSize: 14,
-            color: 'var(--text-primary)',
-            outline: 'none', boxSizing: 'border-box',
-            fontFamily: "'Fira Code', monospace",
-        },
-        inputPwPadding: { paddingRight: 44 },
-        eyeBtn: {
-            position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)',
-            background: 'none', border: 'none', cursor: 'pointer',
-            color: 'var(--text-muted)', padding: 4, display: 'flex',
-            alignItems: 'center', justifyContent: 'center',
-        },
-        submitBtn: {
-            flex: 1, padding: '12px',
-            background: 'linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%)',
-            border: 'none', borderRadius: 10,
-            fontSize: 14, fontWeight: 600, color: 'white',
-            cursor: 'pointer', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', gap: 8,
-            boxShadow: '0 4px 16px rgba(59,130,246,0.3)',
-            transition: 'opacity 0.15s, transform 0.1s',
-        },
-        cancelBtn: {
-            padding: '12px 20px',
-            background: 'var(--bg-hover)',
-            border: '1px solid var(--border-default)', borderRadius: 10,
-            fontSize: 14, fontWeight: 600, color: 'var(--text-secondary)',
-            cursor: 'pointer', display: 'flex', alignItems: 'center',
-            justifyContent: 'center', gap: 8,
-            transition: 'all 0.15s',
-        },
-        btnGroup: {
-            display: 'flex', gap: 10, marginTop: 22,
-        },
-        submitBtnDisabled: { opacity: 0.6, cursor: 'not-allowed' },
-        errorBox: {
-            display: 'flex', alignItems: 'center', gap: 8,
-            background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.25)',
-            borderRadius: 9, padding: '10px 12px',
-            marginBottom: 18, fontSize: 13, color: '#F87171',
-        },
-        // Demo accounts
-        demo: {
-            background: 'rgba(255,255,255,0.02)',
-            border: '1px solid var(--border-subtle)',
-            borderRadius: 12, padding: '14px 16px',
-        },
-        demoTitle: {
-            fontSize: 10, fontWeight: 600, color: 'var(--text-muted)',
-            textTransform: 'uppercase', letterSpacing: '0.1em',
-            textAlign: 'center', marginBottom: 10,
-        },
-        demoRow: {
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            padding: '7px 10px', borderRadius: 7,
-            background: 'rgba(255,255,255,0.03)', marginBottom: 5,
-        },
-        demoCode: { fontFamily: "'Fira Code', monospace", fontSize: 11, color: 'var(--text-secondary)' },
-    };
-
-    const ROLES = [
-        { cred: 'admin / admin123', role: 'ADMIN', color: '#F87171', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.25)' },
-        { cred: 'operator / operator123', role: 'OPERATOR', color: '#FBBF24', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.25)' },
-        { cred: 'user / user123', role: 'USER', color: '#34D399', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.25)' },
-    ];
-
-    const { t, lang, setLang, currentLang } = useLanguage();
-
     return (
-        <div style={S.page}>
-            <div style={S.bgGrid} />
-            <div style={S.glow1} />
-            <div style={S.glow2} />
-
-            {/* Language switcher — top right corner */}
-            <div style={{ position: 'absolute', top: 20, right: 24, display: 'flex', alignItems: 'center', gap: 4, zIndex: 20 }}>
-                {LANGUAGES.map(l => {
-                    const isActive = l.code === lang;
-                    return (
-                        <button
-                            key={l.code}
-                            id={`login-lang-${l.code}`}
-                            onClick={() => setLang(l.code)}
-                            title={l.label}
-                            style={{
-                                display: 'flex', alignItems: 'center', gap: 5,
-                                padding: '5px 10px', borderRadius: 7,
-                                background: isActive ? 'rgba(59,130,246,0.14)' : 'rgba(255,255,255,0.04)',
-                                border: `1px solid ${isActive ? 'rgba(59,130,246,0.35)' : 'rgba(255,255,255,0.08)'}`,
-                                cursor: 'pointer', fontSize: 13,
-                                color: isActive ? 'var(--accent-blue)' : 'var(--text-muted)',
-                                fontFamily: isActive ? "'Fira Code', monospace" : 'inherit',
-                                fontWeight: isActive ? 700 : 400,
-                                transition: 'all 0.15s',
-                            }}
-                            onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.07)'; e.currentTarget.style.color = 'var(--text-secondary)'; } }}
-                            onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; e.currentTarget.style.color = 'var(--text-muted)'; } }}
-                        >
-                            <span style={{ fontSize: 15 }}>{l.flag}</span>
-                            <span style={{ fontSize: 11, fontFamily: "'Fira Code', monospace" }}>{l.short}</span>
-                        </button>
-                    );
-                })}
+        <div className="min-h-screen bg-base flex flex-col justify-center items-center relative overflow-hidden font-sans">
+            <BackgroundMatrix />
+            
+            <div className="absolute top-4 right-4 z-50">
+                <ThemeToggle />
             </div>
 
-            <div style={S.wrap} className="animate-fadeUp">
-                {/* Logo */}
-                <div style={S.logoWrap}>
-                    <div style={S.logoBox}
-                        onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.05)'}
-                        onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
-                    >
-                        <Server size={28} color="white" />
+            <div className="w-full max-w-md p-6 relative z-10">
+                {/* Branding */}
+                <div className="mb-8 text-center flex flex-col items-center">
+                    <div className="w-16 h-16 bg-surface border border-border-default rounded-2xl flex items-center justify-center shadow-sm mb-4">
+                        <Server size={32} className="text-accent" />
                     </div>
-                    <div style={S.title}>{t('loginTitle')}</div>
-                    <div style={S.subtitle}>{t('loginSubtitle')}</div>
+                    <div className="text-2xl font-bold font-mono tracking-tight flex items-center gap-2">
+                        <span className="text-accent">&gt;_</span>
+                        <span className="text-primary truncate">NAS.MANAGER</span>
+                    </div>
+                    <p className="text-secondary text-sm mt-2 font-mono">{t('secureAccessPortal')}</p>
                 </div>
 
-                {/* Form Card */}
-                <div style={S.card}>
-                    <form onSubmit={handleSubmit} noValidate>
-                        {/* Error */}
+                <div className="bg-surface border border-border-default rounded-xl shadow-lg overflow-hidden backdrop-blur-sm">
+                    {/* Header */}
+                    <div className="px-6 py-4 border-b border-border-subtle bg-base/50 flex items-center gap-3">
+                        <Lock size={18} className="text-muted" />
+                        <h2 className="font-mono font-bold text-primary tracking-wide text-sm">{t('authRequired')}</h2>
+                    </div>
+
+                    {/* Form */}
+                    <form onSubmit={handleSubmit} className="p-6 space-y-5">
+                        
+                        {/* Terminal sequence block */}
+                        <div className="bg-base border border-border-subtle rounded-lg p-3 h-28 overflow-y-auto mb-6 text-[10px] font-mono text-muted space-y-1">
+                            {sysInfo.map((msg, i) => (
+                                <div key={i} className="flex gap-2">
+                                    <span className="text-accent/70">[{new Date().toISOString().split('T')[1].slice(0,-1)}]</span>
+                                    <span>{msg}</span>
+                                </div>
+                            ))}
+                            {error && (
+                                <div className="text-danger flex gap-2">
+                                    <span className="text-danger/70">[{new Date().toISOString().split('T')[1].slice(0,-1)}]</span>
+                                    <span>ERROR: {error}</span>
+                                </div>
+                            )}
+                            <div className="text-primary animate-pulse">_</div>
+                        </div>
+
+                        <div className="space-y-4">
+                            {/* Username Input */}
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold font-mono text-secondary ml-1 block">{t('username').toUpperCase()}</label>
+                                <div className="relative group">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted group-focus-within:text-accent transition-colors">
+                                        <User size={16} />
+                                    </div>
+                                    <input
+                                        type="text"
+                                        value={username}
+                                        onChange={(e) => setUsername(e.target.value)}
+                                        className="w-full pl-10 pr-4 py-2.5 bg-base border border-border-default rounded-lg text-primary text-sm focus:border-accent focus:ring-1 focus:ring-accent outline-none transition-all font-mono"
+                                        placeholder="admin"
+                                        autoComplete="username"
+                                        autoFocus
+                                        required
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Password Input */}
+                            <div className="space-y-1">
+                                <label className="text-xs font-bold font-mono text-secondary ml-1 block">{t('password').toUpperCase()}</label>
+                                <div className="relative group">
+                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-muted group-focus-within:text-accent transition-colors">
+                                        <Lock size={16} />
+                                    </div>
+                                    <input
+                                        type={showPassword ? 'text' : 'password'}
+                                        value={password}
+                                        onChange={(e) => setPassword(e.target.value)}
+                                        className="w-full pl-10 pr-12 py-2.5 bg-base border border-border-default rounded-lg text-primary text-sm focus:border-accent focus:ring-1 focus:ring-accent outline-none transition-all font-mono"
+                                        placeholder="••••••••"
+                                        autoComplete="current-password"
+                                        required
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-muted hover:text-primary transition-colors focus:outline-none"
+                                        tabIndex="-1"
+                                    >
+                                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         {error && (
-                            <div style={S.errorBox} className="animate-fadeIn">
-                                <AlertCircle size={15} style={{ flexShrink: 0 }} />
+                            <div className="p-3 bg-danger/10 border border-danger/20 rounded-lg text-danger text-sm font-mono flex items-start gap-2 animate-fadeUp">
+                                <Shield size={16} className="shrink-0 mt-0.5" />
                                 <span>{error}</span>
                             </div>
                         )}
 
-                        {/* Username */}
-                        <label style={S.label} htmlFor="login-username">{t('username')}</label>
-                        <div style={S.inputWrap}>
-                            <input
-                                id="login-username"
-                                type="text"
-                                value={username}
-                                onChange={e => setUsername(e.target.value)}
-                                placeholder={t('username')}
-                                autoFocus
-                                style={S.input}
-                                onFocus={e => { e.target.style.borderColor = 'var(--accent-blue)'; e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.12)'; }}
-                                onBlur={e => { e.target.style.borderColor = 'var(--border-default)'; e.target.style.boxShadow = 'none'; }}
-                            />
-                        </div>
-
-                        {/* Password */}
-                        <label style={S.label} htmlFor="login-password">{t('password')}</label>
-                        <div style={{ position: 'relative', marginBottom: 4 }}>
-                            <input
-                                id="login-password"
-                                type={showPassword ? 'text' : 'password'}
-                                value={password}
-                                onChange={e => setPassword(e.target.value)}
-                                placeholder="••••••••"
-                                style={{ ...S.input, ...S.inputPwPadding }}
-                                onFocus={e => { e.target.style.borderColor = 'var(--accent-blue)'; e.target.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.12)'; }}
-                                onBlur={e => { e.target.style.borderColor = 'var(--border-default)'; e.target.style.boxShadow = 'none'; }}
-                            />
-                            <button type="button" onClick={() => setShowPassword(!showPassword)} style={S.eyeBtn}
-                                onMouseEnter={e => e.currentTarget.style.color = 'var(--text-primary)'}
-                                onMouseLeave={e => e.currentTarget.style.color = 'var(--text-muted)'}
-                            >
-                                {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                            </button>
-                        </div>
-
-                        <div style={S.btnGroup}>
-                            {/* Sign In button */}
-                            <button
-                                id="login-submit"
-                                type="submit"
-                                disabled={loading}
-                                style={{ ...S.submitBtn, ...(loading ? S.submitBtnDisabled : {}) }}
-                                onMouseEnter={e => { if (!loading) e.currentTarget.style.opacity = '0.88'; }}
-                                onMouseLeave={e => e.currentTarget.style.opacity = '1'}
-                                onMouseDown={e => { if (!loading) e.currentTarget.style.transform = 'scale(0.98)'; }}
-                                onMouseUp={e => e.currentTarget.style.transform = 'scale(1)'}
-                            >
-                                {loading ? (
-                                    <>
-                                        <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.4)', borderTopColor: 'white', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} />
-                                        {t('signIn') || 'Đăng nhập'}...
-                                    </>
-                                ) : (
-                                    <>
-                                        <LogIn size={16} />
-                                        {t('signIn')}
-                                    </>
-                                )}
-                            </button>
-
-                            {/* Cancel button */}
-                            <button
-                                type="button"
-                                onClick={handleOperatorLogin}
-                                disabled={loading}
-                                style={{ ...S.cancelBtn, ...(loading ? { opacity: 0.6, cursor: 'not-allowed' } : {}) }}
-                                onMouseEnter={e => { if (!loading) { e.currentTarget.style.background = 'var(--bg-elevated)'; e.currentTarget.style.color = 'var(--text-primary)'; } }}
-                                onMouseLeave={e => { if (!loading) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-secondary)'; } }}
-                            >
-                                {t('cancel') || 'Hủy bỏ'}
-                            </button>
-                        </div>
+                        <button
+                            type="submit"
+                            disabled={loading || !username || !password}
+                            className="w-full py-3 bg-accent text-white font-bold font-mono rounded-lg hover:opacity-90 active:scale-[0.99] transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 relative overflow-hidden group shadow-sm mt-4"
+                        >
+                            {loading ? (
+                                <Loader2 size={18} className="animate-spin" />
+                            ) : (
+                                <>
+                                    <span>{t('initializeSession')}</span>
+                                    <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                                </>
+                            )}
+                            {/* Button highlight effect */}
+                            <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                        </button>
                     </form>
                 </div>
-
-                {/* Demo accounts */}
-                <div style={S.demo}>
-                    <div style={S.demoTitle}>
-                        <Shield size={9} style={{ display: 'inline', marginRight: 5 }} />
-                        {t('demoAccounts')}
-                    </div>
-                    {ROLES.map(({ cred, role, color, bg, border }) => (
-                        <div key={role} style={S.demoRow}>
-                            <span style={S.demoCode}>{cred}</span>
-                            <span style={{ fontSize: 10, fontWeight: 700, color, background: bg, border: `1px solid ${border}`, padding: '2px 7px', borderRadius: 20, letterSpacing: '0.05em' }}>
-                                {role}
-                            </span>
-                        </div>
-                    ))}
+                
+                <div className="mt-8 text-center text-xs font-mono text-muted flex items-center justify-center gap-2">
+                    <Shield size={12} />
+                    <span>{t('encryptedConnection')}</span>
                 </div>
             </div>
-
-            <style>{`
-                @keyframes spin { to { transform: rotate(360deg); } }
-            `}</style>
         </div>
     );
 };

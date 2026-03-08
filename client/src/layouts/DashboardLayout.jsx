@@ -1,9 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Server, Folder, Settings, Users, LogOut, Shield, ChevronDown, Globe, Wifi } from 'lucide-react';
+import { LayoutDashboard, Server, Folder, Settings, Users, LogOut, Shield, ChevronDown, Globe, Wifi, Activity, Terminal } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage, LANGUAGES } from '../contexts/LanguageContext';
+import { useTheme } from '../contexts/ThemeContext';
 import CommandPalette from '../components/CommandPalette';
+import ThemeToggle from '../components/ThemeToggle';
+import NotificationToast from '../components/NotificationToast';
+import AgentStatusBadge from '../components/AgentStatusBadge';
 
 // ── Language Selector Dropdown ──────────────────────────────────────────
 const LanguageSelector = ({ compact = false }) => {
@@ -11,7 +15,6 @@ const LanguageSelector = ({ compact = false }) => {
     const [open, setOpen] = useState(false);
     const ref = useRef(null);
 
-    // Close on outside click
     useEffect(() => {
         const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
         document.addEventListener('mousedown', handler);
@@ -19,98 +22,35 @@ const LanguageSelector = ({ compact = false }) => {
     }, []);
 
     return (
-        <div ref={ref} style={{ position: 'relative' }}>
+        <div ref={ref} className="relative">
             <button
-                id="language-selector-btn"
                 onClick={() => setOpen(!open)}
                 title={t('language')}
-                style={{
-                    display: 'flex', alignItems: 'center', gap: compact ? 4 : 6,
-                    padding: compact ? '5px 8px' : '5px 10px',
-                    background: 'rgba(59,130,246,0.06)',
-                    border: '1px solid rgba(59,130,246,0.18)',
-                    borderRadius: 7, cursor: 'pointer',
-                    fontSize: compact ? 12 : 13,
-                    color: 'var(--text-secondary)',
-                    transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(59,130,246,0.12)'; e.currentTarget.style.borderColor = 'rgba(59,130,246,0.3)'; e.currentTarget.style.color = 'var(--text-primary)'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(59,130,246,0.06)'; e.currentTarget.style.borderColor = 'rgba(59,130,246,0.18)'; e.currentTarget.style.color = 'var(--text-secondary)'; }}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-md hover:bg-hover cursor-pointer text-secondary transition-all"
             >
-                <span style={{ fontSize: 14 }}>{currentLang.flag}</span>
+                <span className="text-sm">{currentLang.flag}</span>
                 {!compact && (
-                    <span style={{ fontFamily: "'Fira Code', monospace", fontWeight: 600, letterSpacing: '0.05em', fontSize: 11 }}>
+                    <span className="font-mono font-bold tracking-widest text-xs uppercase">
                         {currentLang.short}
                     </span>
                 )}
-                <ChevronDown size={11} style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s', color: 'var(--text-muted)' }} />
             </button>
 
             {open && (
-                <div
-                    className="animate-fadeUp"
-                    style={{
-                        position: 'absolute', top: 'calc(100% + 6px)', right: 0, zIndex: 200,
-                        background: 'var(--bg-elevated)',
-                        border: '1px solid var(--border-default)',
-                        borderRadius: 10,
-                        boxShadow: 'var(--shadow-elevated)',
-                        minWidth: 168,
-                        overflow: 'hidden',
-                    }}
-                >
-                    {/* Header label */}
-                    <div style={{ padding: '8px 12px 6px', borderBottom: '1px solid var(--border-subtle)' }}>
-                        <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                            {t('language')}
-                        </span>
-                    </div>
-
-                    {/* Options */}
-                    <div style={{ padding: 4 }}>
+                <div className="absolute top-full right-0 mt-2 z-50 bg-elevated border border-border-default rounded-md min-w-[160px] shadow-elevated overflow-hidden animate-fadeUp">
+                    <div className="p-1">
                         {languages.map(lang => {
                             const isActive = lang.code === currentLang.code;
                             return (
                                 <button
                                     key={lang.code}
-                                    id={`lang-option-${lang.code}`}
                                     onClick={() => { setLang(lang.code); setOpen(false); }}
-                                    style={{
-                                        width: '100%', display: 'flex', alignItems: 'center', gap: 10,
-                                        padding: '8px 10px', borderRadius: 7,
-                                        background: isActive ? 'rgba(59,130,246,0.1)' : 'transparent',
-                                        border: `1px solid ${isActive ? 'rgba(59,130,246,0.2)' : 'transparent'}`,
-                                        cursor: 'pointer', textAlign: 'left',
-                                        transition: 'all 0.1s',
-                                    }}
-                                    onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.borderColor = 'var(--border-subtle)'; } }}
-                                    onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.borderColor = 'transparent'; } }}
+                                    className={`w-full flex items-center gap-2 px-3 py-2 cursor-pointer text-left transition-colors font-mono text-sm rounded-sm
+                                        ${isActive ? 'bg-accent/10 text-accent font-bold' : 'hover:bg-hover text-secondary hover:text-primary'}
+                                    `}
                                 >
-                                    {/* Flag */}
-                                    <span style={{ fontSize: 18, lineHeight: 1 }}>{lang.flag}</span>
-
-                                    {/* Label */}
-                                    <div style={{ flex: 1 }}>
-                                        <div style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, color: isActive ? 'var(--accent-blue)' : 'var(--text-primary)' }}>
-                                            {lang.label}
-                                        </div>
-                                    </div>
-
-                                    {/* Short code */}
-                                    <span style={{
-                                        fontSize: 10, fontWeight: 700, fontFamily: "'Fira Code', monospace",
-                                        color: isActive ? 'var(--accent-blue)' : 'var(--text-muted)',
-                                        background: isActive ? 'rgba(59,130,246,0.1)' : 'var(--bg-elevated)',
-                                        border: `1px solid ${isActive ? 'rgba(59,130,246,0.25)' : 'var(--border-subtle)'}`,
-                                        padding: '1px 6px', borderRadius: 4,
-                                    }}>
-                                        {lang.short}
-                                    </span>
-
-                                    {/* Active check */}
-                                    {isActive && (
-                                        <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-blue)', boxShadow: '0 0 5px rgba(59,130,246,0.5)', flexShrink: 0 }} />
-                                    )}
+                                    <span className="text-base leading-none">{lang.flag}</span>
+                                    <span className="flex-1">{lang.label}</span>
                                 </button>
                             );
                         })}
@@ -127,7 +67,7 @@ const DashboardLayout = () => {
     const navigate = useNavigate();
     const { user, logout, isAdmin, hasPermission } = useAuth();
     const { t } = useLanguage();
-    const [showUserMenu, setShowUserMenu] = useState(false);
+    const { isDark } = useTheme();
 
     const handleLogout = () => {
         logout();
@@ -136,54 +76,50 @@ const DashboardLayout = () => {
 
     const navItems = [
         { path: '/', labelKey: 'overview', icon: LayoutDashboard, show: true },
+        { path: '/system', labelKey: 'systemStatus', icon: Activity, show: hasPermission('MANAGE_HIERARCHY') },
         { path: '/files', labelKey: 'fileExplorer', icon: Folder, show: hasPermission('READ_FILES', 'BROWSE_FILES') },
         { path: '/network', labelKey: 'network', icon: Globe, show: hasPermission('MANAGE_HIERARCHY') },
+        { path: '/topology', labelKey: 'topology', icon: Wifi, show: hasPermission('MANAGE_HIERARCHY') },
         { path: '/admin', labelKey: 'infrastructure', icon: Settings, show: hasPermission('MANAGE_HIERARCHY', 'WRITE_HIERARCHY') },
         { path: '/users', labelKey: 'usersRoles', icon: Users, show: isAdmin() },
     ].filter(i => i.show);
 
-    const getRoleStyle = (role) => ({
-        Admin: { color: '#F87171', bg: 'rgba(239,68,68,0.12)', border: 'rgba(239,68,68,0.25)' },
-        Operator: { color: '#FBBF24', bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.25)' },
-        User: { color: '#34D399', bg: 'rgba(16,185,129,0.12)', border: 'rgba(16,185,129,0.25)' },
-        Viewer: { color: '#60A5FA', bg: 'rgba(59,130,246,0.12)', border: 'rgba(59,130,246,0.25)' },
-    }[role] || { color: '#8B9DC0', bg: 'rgba(139,157,192,0.12)', border: 'rgba(139,157,192,0.25)' });
-
-    const roleStyle = getRoleStyle(user?.roleName);
     const pageTitle = navItems.find(i => i.path === location.pathname);
-    const pageTitleLabel = pageTitle ? t(pageTitle.labelKey) : 'Dashboard';
+    const pageTitleLabel = pageTitle ? t(pageTitle.labelKey) : t('overview');
+
+    useEffect(() => {
+        document.title = `${pageTitleLabel} — NAS Manager`;
+    }, [pageTitleLabel]);
 
     return (
-        <div style={{ display: 'flex', height: '100vh', background: 'var(--bg-base)', overflow: 'hidden' }}>
+        <div className="flex h-screen bg-base overflow-hidden text-primary font-sans">
 
             {/* ── Sidebar ── */}
-            <aside style={{
-                width: 220, flexShrink: 0,
-                background: 'var(--bg-surface)',
-                borderRight: '1px solid var(--border-subtle)',
-                display: 'flex', flexDirection: 'column',
-                position: 'relative', zIndex: 10,
-            }}>
+            <aside className="w-64 bg-surface border-r border-border-default flex flex-col relative z-20 shadow-sm shrink-0">
 
                 {/* Logo */}
-                <div style={{ padding: '20px 16px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <div style={{ width: 34, height: 34, background: 'linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%)', borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 12px rgba(59,130,246,0.3)', flexShrink: 0 }}>
-                            <Server size={17} color="white" />
+                <div className="pt-8 pb-6 px-6">
+                    <div className="text-xl font-bold font-mono tracking-tight flex items-center gap-2">
+                        <span className="text-accent">&gt;_</span>
+                        <span className="text-primary truncate">NAS.MANAGER</span>
+                    </div>
+                </div>
+
+                {/* Session */}
+                <div className="px-6 pb-6 mb-2">
+                    <div className="text-[10px] text-muted font-bold uppercase tracking-widest mb-3">{t('session')}</div>
+                    <div className="flex items-center gap-3">
+                        <div className="w-2 h-2 rounded-full bg-success"></div>
+                        <div className="font-mono text-xs font-bold leading-tight">
+                            <div className="text-primary">{user?.roleName || 'System'}</div>
+                            <div className="text-muted font-normal mt-0.5">{user?.username || 'Administrator'}</div>
                         </div>
-                        <div>
-                            <div style={{ fontFamily: "'Fira Code', monospace", fontSize: 14, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>NAS Manager</div>
-                            <div style={{ fontSize: 10, color: 'var(--text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase' }}>v1.0-beta</div>
-                        </div>
+                        <div className="ml-auto text-[9px] font-bold bg-base border border-border-subtle px-1.5 py-0.5 rounded text-muted shadow-sm uppercase">{t('master')}</div>
                     </div>
                 </div>
 
                 {/* Nav */}
-                <nav style={{ flex: 1, padding: '12px 10px', display: 'flex', flexDirection: 'column', gap: 2 }}>
-                    <div style={{ fontSize: 10, fontWeight: 600, color: 'var(--text-muted)', letterSpacing: '0.08em', textTransform: 'uppercase', padding: '8px 10px 4px' }}>
-                        Navigation
-                    </div>
-
+                <nav className="flex-1 px-4 flex flex-col gap-1 overflow-y-auto">
                     {navItems.map((item) => {
                         const isActive = location.pathname === item.path;
                         const Icon = item.icon;
@@ -191,128 +127,62 @@ const DashboardLayout = () => {
                             <Link
                                 key={item.path}
                                 to={item.path}
-                                style={{
-                                    display: 'flex', alignItems: 'center', gap: 10,
-                                    padding: '9px 10px', borderRadius: 8, textDecoration: 'none',
-                                    fontSize: 13.5, fontWeight: isActive ? 500 : 400,
-                                    color: isActive ? '#fff' : 'var(--text-secondary)',
-                                    background: isActive ? 'linear-gradient(135deg, rgba(59,130,246,0.25) 0%, rgba(6,182,212,0.15) 100%)' : 'transparent',
-                                    border: `1px solid ${isActive ? 'rgba(59,130,246,0.3)' : 'transparent'}`,
-                                    boxShadow: isActive ? '0 2px 8px rgba(59,130,246,0.1)' : 'none',
-                                    transition: 'all 0.15s', position: 'relative',
-                                }}
-                                onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = 'var(--bg-hover)'; e.currentTarget.style.color = 'var(--text-primary)'; } }}
-                                onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-secondary)'; } }}
+                                className={`group flex items-center gap-3 px-4 py-2.5 rounded-lg font-mono text-sm font-bold transition-all duration-200
+                                    ${isActive
+                                        ? 'bg-nav-active-bg text-nav-active-text'
+                                        : 'text-secondary hover:bg-hover hover:text-primary'}
+                                `}
                             >
-                                {isActive && (
-                                    <div style={{ position: 'absolute', left: 0, top: '20%', bottom: '20%', width: 3, background: 'linear-gradient(180deg,#3B82F6,#06B6D4)', borderRadius: '0 4px 4px 0' }} />
-                                )}
-                                <Icon size={16} style={{ flexShrink: 0, color: isActive ? 'var(--accent-cyan)' : 'inherit' }} />
+                                <Icon size={18} className={`shrink-0 ${isActive ? 'text-accent' : 'text-muted group-hover:text-primary'}`} />
                                 {t(item.labelKey)}
                             </Link>
                         );
                     })}
                 </nav>
 
-                {/* Status Indicator */}
-                <div style={{ margin: '0 10px 10px', padding: '10px 12px', background: 'rgba(16,185,129,0.06)', border: '1px solid rgba(16,185,129,0.15)', borderRadius: 9, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--success)', boxShadow: '0 0 6px rgba(16,185,129,0.6)' }} className="pulse-dot" />
-                    <span style={{ fontSize: 11, color: '#34D399', fontWeight: 500 }}>{t('systemOnline')}</span>
-                </div>
-
-                {/* User section */}
-                <div style={{ padding: '0 10px 12px', position: 'relative' }}>
-                    <div style={{ borderTop: '1px solid var(--border-subtle)', paddingTop: 12 }} />
+                {/* Bottom Actions */}
+                <div className="p-4 border-t border-border-subtle">
                     <button
-                        onClick={() => setShowUserMenu(!showUserMenu)}
-                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', borderRadius: 9, background: showUserMenu ? 'var(--bg-hover)' : 'transparent', border: '1px solid transparent', cursor: 'pointer' }}
-                        onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-hover)'}
-                        onMouseLeave={e => { if (!showUserMenu) e.currentTarget.style.background = 'transparent'; }}
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-secondary hover:bg-hover hover:text-primary transition-colors font-mono text-sm font-bold"
                     >
-                        <div style={{ width: 32, height: 32, borderRadius: 9, flexShrink: 0, background: 'linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: 700, color: 'white', boxShadow: '0 2px 8px rgba(59,130,246,0.25)' }}>
-                            {user?.username?.[0]?.toUpperCase() || 'U'}
-                        </div>
-                        <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
-                            <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{user?.username}</div>
-                            <div style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 7px', borderRadius: 20, fontSize: 10, fontWeight: 600, color: roleStyle.color, background: roleStyle.bg, border: `1px solid ${roleStyle.border}`, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                                <Shield size={9} />{user?.roleName}
-                            </div>
-                        </div>
-                        <ChevronDown size={14} style={{ color: 'var(--text-muted)', transform: showUserMenu ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }} />
+                        <LogOut size={18} className="text-muted" />
+                        {t('signOut')}
                     </button>
-
-                    {showUserMenu && (
-                        <>
-                            <div style={{ position: 'fixed', inset: 0, zIndex: 40 }} onClick={() => setShowUserMenu(false)} />
-                            <div className="animate-fadeUp" style={{ position: 'absolute', bottom: '100%', left: 10, right: 10, marginBottom: 6, background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 10, boxShadow: 'var(--shadow-elevated)', overflow: 'hidden', zIndex: 50 }}>
-                                <div style={{ padding: '10px 12px', borderBottom: '1px solid var(--border-subtle)' }}>
-                                    <div style={{ fontSize: 10, color: 'var(--text-muted)', marginBottom: 2 }}>{t('signedInAs')}</div>
-                                    <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)' }}>{user?.username}</div>
-                                </div>
-                                <div style={{ padding: 4 }}>
-                                    <button
-                                        onClick={handleLogout}
-                                        style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 10px', borderRadius: 7, fontSize: 13, color: '#F87171', background: 'transparent', border: 'none', cursor: 'pointer' }}
-                                        onMouseEnter={e => e.currentTarget.style.background = 'rgba(239,68,68,0.1)'}
-                                        onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
-                                    >
-                                        <LogOut size={14} />
-                                        {t('signOut')}
-                                    </button>
-                                </div>
-                            </div>
-                        </>
-                    )}
                 </div>
             </aside>
 
             {/* ── Main Content ── */}
-            <main style={{ flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+            <main className="flex-1 flex flex-col overflow-hidden relative bg-base">
 
                 {/* Top Header */}
-                <header style={{ height: 56, background: 'var(--bg-surface)', borderBottom: '1px solid var(--border-subtle)', display: 'flex', alignItems: 'center', padding: '0 28px', justifyContent: 'space-between', flexShrink: 0, position: 'sticky', top: 0, zIndex: 30 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                        <div style={{ fontFamily: "'Fira Code', monospace", fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '-0.01em' }}>
-                            {pageTitleLabel}
-                        </div>
+                <header className="h-20 flex items-center px-8 justify-between shrink-0 relative z-10 w-full pt-2">
+                    <div className="font-mono text-secondary text-sm flex items-center gap-2">
+                        <span className="text-muted">~/</span> <span className="lowercase">{pageTitleLabel}</span>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div className="flex items-center gap-4">
                         {/* Global Search Hint */}
-                        <div
-                            style={{
-                                display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px',
-                                background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
-                                borderRadius: 7, fontSize: 12, color: 'var(--text-muted)',
-                                userSelect: 'none'
-                            }}
-                        >
-                            <span>Search...</span>
-                            <div style={{ padding: '2px 6px', background: 'var(--bg-hover)', borderRadius: 4, fontSize: 10, fontWeight: 600, fontFamily: "'Fira Code', monospace", border: '1px solid var(--border-subtle)' }}>
-                                Ctrl K
+                        <div className="hidden sm:flex items-center gap-2 text-[10px] font-mono font-bold text-muted uppercase tracking-widest px-1">
+                            {t('press')} <span className="text-accent bg-accent/10 border border-accent/20 px-1.5 py-0.5 rounded flex items-center gap-1 shadow-sm"><span className="font-sans">⌘</span>K / CTRL+K</span> {t('pressToExecute')}
+                        </div>
+
+                        <div className="flex items-center gap-1 ml-4 border-l border-border-subtle pl-4">
+                            <AgentStatusBadge />
+                            <div className="relative">
+                                <NotificationToast />
                             </div>
-                        </div>
-
-                        {/* Language Selector */}
-                        <LanguageSelector />
-
-                        {/* Connection status */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', background: 'rgba(6,182,212,0.08)', border: '1px solid rgba(6,182,212,0.2)', borderRadius: 7, fontSize: 11, color: 'var(--accent-cyan)' }}>
-                            <Wifi size={12} />
-                            <span>{t('connected')}</span>
-                        </div>
-
-                        {/* Role badge */}
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 10px', background: roleStyle.bg, border: `1px solid ${roleStyle.border}`, borderRadius: 7, fontSize: 11, fontWeight: 600, color: roleStyle.color, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
-                            <Shield size={11} />
-                            {user?.roleName}
+                            <LanguageSelector />
+                            <ThemeToggle />
                         </div>
                     </div>
                 </header>
 
                 {/* Page Content */}
-                <div style={{ flex: 1, padding: '24px 28px', overflow: 'auto' }}>
-                    <Outlet />
+                <div className="flex-1 p-8 overflow-auto relative z-0">
+                    <div className="max-w-[1400px] mx-auto w-full">
+                        <Outlet />
+                    </div>
                 </div>
             </main>
 

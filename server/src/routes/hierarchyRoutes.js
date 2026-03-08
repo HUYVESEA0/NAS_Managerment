@@ -11,9 +11,16 @@ router.get('/', hierarchyController.getFullHierarchy);
 
 // Create/Update/Delete — cần quyền WRITE hoặc MANAGE
 router.post('/floors', authorize('MANAGE_HIERARCHY', 'WRITE_HIERARCHY'), hierarchyController.createFloor);
+router.put('/floors/:id', authorize('MANAGE_HIERARCHY', 'WRITE_HIERARCHY'), hierarchyController.updateFloor);
+router.delete('/floors/:id', authorize('MANAGE_HIERARCHY', 'WRITE_HIERARCHY'), hierarchyController.deleteFloor);
+
 router.post('/rooms', authorize('MANAGE_HIERARCHY', 'WRITE_HIERARCHY'), hierarchyController.createRoom);
+router.put('/rooms/:id', authorize('MANAGE_HIERARCHY', 'WRITE_HIERARCHY'), hierarchyController.updateRoom);
+router.delete('/rooms/:id', authorize('MANAGE_HIERARCHY', 'WRITE_HIERARCHY'), hierarchyController.deleteRoom);
+
 router.post('/machines', authorize('MANAGE_HIERARCHY', 'WRITE_HIERARCHY'), hierarchyController.createMachine);
 router.put('/machines/:id', authorize('MANAGE_HIERARCHY', 'WRITE_HIERARCHY'), hierarchyController.updateMachine);
+router.delete('/machines/:id', authorize('MANAGE_HIERARCHY', 'WRITE_HIERARCHY'), hierarchyController.deleteMachine);
 
 router.post('/mounts', authorize('MANAGE_HIERARCHY', 'WRITE_HIERARCHY'), hierarchyController.createMountPoint);
 router.put('/mounts/:id', authorize('MANAGE_HIERARCHY', 'WRITE_HIERARCHY'), hierarchyController.updateMountPoint);

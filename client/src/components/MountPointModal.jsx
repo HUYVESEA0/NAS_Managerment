@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { X, Save, Trash2, Plus, HardDrive } from 'lucide-react';
 import api from '../services/api';
+import { useLanguage } from '../contexts/LanguageContext';
 
 const MountPointModal = ({ machine, onClose, onUpdate }) => {
+    const { t } = useLanguage();
     const [mountPoints, setMountPoints] = useState([]);
     const [newMount, setNewMount] = useState({ name: '', path: '' });
     const [editingId, setEditingId] = useState(null);
@@ -29,20 +31,20 @@ const MountPointModal = ({ machine, onClose, onUpdate }) => {
             onUpdate(); // Trigger refresh
             // Optimistically add would be better, but simple refresh for now
         } catch (err) {
-            setError(err.response?.data?.error || 'Failed to add mount point');
+            setError(err.response?.data?.error || t('failedToAddMount'));
         } finally {
             setLoading(false);
         }
     };
 
     const handleDelete = async (id) => {
-        if (!window.confirm('Are you sure you want to delete this mount point?')) return;
+        if (!window.confirm(t('confirmDeleteMountPoint'))) return;
         setLoading(true);
         try {
             await api.delete(`/hierarchy/mounts/${id}`);
             onUpdate();
         } catch (err) {
-            setError(err.response?.data?.error || 'Failed to delete mount point');
+            setError(err.response?.data?.error || t('failedToDeleteMount'));
         } finally {
             setLoading(false);
         }
@@ -65,7 +67,7 @@ const MountPointModal = ({ machine, onClose, onUpdate }) => {
             setEditingId(null);
             onUpdate();
         } catch (err) {
-            setError(err.response?.data?.error || 'Failed to update mount point');
+            setError(err.response?.data?.error || t('failedToUpdateMount'));
         } finally {
             setLoading(false);
         }
@@ -77,7 +79,7 @@ const MountPointModal = ({ machine, onClose, onUpdate }) => {
                 <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
                     <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
                         <HardDrive className="w-5 h-5 text-indigo-500" />
-                        Manage Drives - {machine.name}
+                        {t('manageDrives')} - {machine.name}
                     </h3>
                     <button onClick={onClose} className="p-1 hover:bg-gray-200 rounded-full transition-colors">
                         <X className="w-5 h-5 text-gray-500" />
@@ -93,8 +95,8 @@ const MountPointModal = ({ machine, onClose, onUpdate }) => {
 
                     {/* List Existing Mounts */}
                     <div className="space-y-3 mb-6">
-                        <h4 className="text-sm font-medium text-gray-700 uppercase tracking-wider">Current Drives</h4>
-                        {mountPoints.length === 0 && <p className="text-sm text-gray-400 italic">No drives configured.</p>}
+                        <h4 className="text-sm font-medium text-gray-700 uppercase tracking-wider">{t('currentDrives')}</h4>
+                        {mountPoints.length === 0 && <p className="text-sm text-gray-400 italic">{t('noDrivesConfigured')}</p>}
 
                         {mountPoints.map(mount => (
                             <div key={mount.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-100">
@@ -104,13 +106,13 @@ const MountPointModal = ({ machine, onClose, onUpdate }) => {
                                             value={editForm.name}
                                             onChange={e => setEditForm({ ...editForm, name: e.target.value })}
                                             className="w-1/3 px-2 py-1 text-sm border rounded"
-                                            placeholder="Name"
+                                            placeholder={t('name')}
                                         />
                                         <input
                                             value={editForm.path}
                                             onChange={e => setEditForm({ ...editForm, path: e.target.value })}
                                             className="flex-1 px-2 py-1 text-sm border rounded"
-                                            placeholder="Path"
+                                            placeholder={t('path')}
                                         />
                                         <button onClick={() => saveEdit(mount.id)} className="p-1 text-green-600 hover:bg-green-100 rounded">
                                             <Save className="w-4 h-4" />
@@ -141,27 +143,27 @@ const MountPointModal = ({ machine, onClose, onUpdate }) => {
 
                     {/* Add New Mount */}
                     <div className="pt-4 border-t border-gray-100">
-                        <h4 className="text-sm font-medium text-gray-700 uppercase tracking-wider mb-2">Add New Drive</h4>
+                        <h4 className="text-sm font-medium text-gray-700 uppercase tracking-wider mb-2">{t('addNewDrive')}</h4>
                         <form onSubmit={handleAdd} className="flex gap-2 items-end">
                             <div className="w-1/3">
-                                <label className="block text-xs text-gray-500 mb-1">Name (Display)</label>
+                                <label className="block text-xs text-gray-500 mb-1">{t('nameDisplay')}</label>
                                 <input
                                     type="text"
                                     value={newMount.name}
                                     onChange={e => setNewMount({ ...newMount, name: e.target.value })}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                                    placeholder="e.g. Media"
+                                    placeholder={t('nameDisplayPlaceholder')}
                                     required
                                 />
                             </div>
                             <div className="flex-1">
-                                <label className="block text-xs text-gray-500 mb-1">Path (Absolute)</label>
+                                <label className="block text-xs text-gray-500 mb-1">{t('pathAbsolute')}</label>
                                 <input
                                     type="text"
                                     value={newMount.path}
                                     onChange={e => setNewMount({ ...newMount, path: e.target.value })}
                                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
-                                    placeholder="e.g. D:/Media or /mnt/data"
+                                    placeholder={t('pathAbsolutePlaceholder')}
                                     required
                                 />
                             </div>
@@ -171,7 +173,7 @@ const MountPointModal = ({ machine, onClose, onUpdate }) => {
                                 className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors flex items-center gap-1"
                             >
                                 <Plus className="w-4 h-4" />
-                                Add
+                                {t('add')}
                             </button>
                         </form>
                     </div>
