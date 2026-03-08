@@ -14,9 +14,10 @@ const fileLogger = createLogger('activity');
  * @param {string} opts.message  - Human-readable description
  * @param {object} [opts.meta]   - Extra context data
  * @param {number} [opts.userId] - User who performed the action
+ * @param {number} [opts.machineId] - Machine involved (if any)
  * @param {string} [opts.ipAddress]
  */
-async function logActivity({ level = 'info', category, action, message, meta, userId, ipAddress }) {
+async function logActivity({ level = 'info', category, action, message, meta, userId, machineId, ipAddress }) {
     // 1. Write to file log
     fileLogger[level] ? fileLogger[level](message, { category, action, ...meta }) : fileLogger.info(message, { category, action, ...meta });
 
@@ -30,6 +31,7 @@ async function logActivity({ level = 'info', category, action, message, meta, us
                 message,
                 meta: meta ? JSON.stringify(meta) : null,
                 userId: userId || null,
+                machineId: machineId ? parseInt(machineId) : null,
                 ipAddress: ipAddress || null,
             },
         });
@@ -45,6 +47,7 @@ async function logActivity({ level = 'info', category, action, message, meta, us
         message,
         meta: meta || {},
         userId,
+        machineId: machineId || null,
         timestamp: Date.now(),
     });
 }

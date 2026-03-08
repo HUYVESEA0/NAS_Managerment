@@ -201,3 +201,48 @@ exports.changeUserPassword = async (config, username, newPassword) => {
 
     return { username, message: `Password changed for '${username}'` };
 };
+
+/**
+ * Download (stream) a file via SFTP
+ * @param {object} config - { host, port, username, password }
+ * @param {string} remotePath - Absolute path on the remote machine
+ * @returns {Promise<{ stream: ReadableStream, size: number, name: string }>}
+ */
+exports.downloadFile = (config, remotePath) => {
+    return new Promise((resolve, reject) => {
+        const conn = new Client();
+
+        conn.on('ready', () => {
+            conn.sftp((err, sftp) => {
+                if (err) {
+                    conn.end();
+                    return reject(err);
+                }
+
+                sftp.stat(remotePath, (statErr, stat) => {
+                    if (statErr) {
+                        conn.end();
+                        return reject(new Error(`File not found on remote machine: ${remotePath}`));
+                    }
+
+                    const readStream = sftp.createReadStream(remotePath);
+                    readStream.on('error', () => conn.end());
+                    // conn.end() is called when stream closes naturally
+                    readStream.on('close', () => conn.end());
+
+                    resolve({
+                        stream: readStream,
+                        size: stat.size,
+                        name: require('path').basename(remotePath)
+                    });
+                });
+            });
+        }).on('error', reject).connect({
+            host: config.host,
+            port: config.port || 22,
+            username: config.username,
+            password: config.password,
+            tryKeyboard: true
+        });
+    });
+};

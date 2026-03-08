@@ -401,6 +401,17 @@ export const en = {
     activityLog: 'Activity Log',
     clear: 'Clear',
     noActivityYet: 'No activity yet',
+    clearLogs: 'Clear Logs',
+    clearLogsConfirm: 'This will permanently delete all activity logs. Are you sure?',
+    newEventsClick: 'new events — click to refresh',
+    allCategories: 'All Categories',
+    allLevels: 'All Levels',
+    allMachines: 'All Machines',
+    searchLogs: 'Search logs...',
+    resetFilters: 'Reset',
+    from: 'From date',
+    to: 'To date',
+    confirm: 'Confirm',
 
     // PathManager
     savedPaths: 'Saved Paths',
@@ -456,4 +467,18 @@ export const en = {
     master: 'MASTER',
     pressToExecute: 'TO EXECUTE',
     press: 'PRESS',
+
+    // Profile
+    profile: 'Profile',
+    myProfile: 'My Profile',
+    accountInfo: 'Account Info',
+    currentPassword: 'Current Password',
+    newPassword: 'New Password',
+    confirmNewPassword: 'Confirm New Password',
+    memberSince: 'Member Since',
+    passwordChangedSuccess: 'Password changed successfully',
+    passwordMismatch: 'New passwords do not match',
+    passwordTooShort: 'Password must be at least 6 characters',
+    myPermissions: 'My Permissions',
+    noPermissions: 'No permissions assigned',
 };

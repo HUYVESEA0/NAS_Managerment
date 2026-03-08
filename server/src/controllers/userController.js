@@ -1,5 +1,6 @@
 const prisma = require('../utils/prisma');
 const bcrypt = require('bcryptjs');
+const { logActivity } = require('../utils/activityService');
 
 // ==================== USER CRUD ====================
 
@@ -98,6 +99,7 @@ exports.createUser = async (req, res) => {
             roleName: user.role.name,
             permissions: JSON.parse(user.role.permissions)
         });
+        logActivity({ category: 'user', action: 'create_user', message: `Admin created user "${username}"`, userId: req.user?.id, ipAddress: req.ip, meta: { targetUsername: username, roleId: user.roleId } });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
@@ -129,6 +131,7 @@ exports.updateUser = async (req, res) => {
             roleName: user.role.name,
             permissions: JSON.parse(user.role.permissions)
         });
+        logActivity({ category: 'user', action: 'update_user', message: `Admin updated user ID ${id}`, userId: req.user?.id, ipAddress: req.ip, meta: { targetUserId: id } });
     } catch (error) {
         res.status(400).json({ error: error.message });
     }
@@ -147,6 +150,7 @@ exports.deleteUser = async (req, res) => {
         }
 
         await prisma.user.delete({ where: { id: userId } });
+        logActivity({ category: 'user', action: 'delete_user', level: 'warn', message: `Admin deleted user ID ${userId}`, userId: req.user?.id, ipAddress: req.ip, meta: { targetUserId: userId } });
         res.status(204).send();
     } catch (error) {
         res.status(400).json({ error: error.message });

@@ -82,6 +82,7 @@ const DashboardLayout = () => {
         { path: '/topology', labelKey: 'topology', icon: Wifi, show: hasPermission('MANAGE_HIERARCHY') },
         { path: '/admin', labelKey: 'infrastructure', icon: Settings, show: hasPermission('MANAGE_HIERARCHY', 'WRITE_HIERARCHY') },
         { path: '/users', labelKey: 'usersRoles', icon: Users, show: isAdmin() },
+        { path: '/logs', labelKey: 'activityLog', icon: Shield, show: isAdmin() },
     ].filter(i => i.show);
 
     const pageTitle = navItems.find(i => i.path === location.pathname);

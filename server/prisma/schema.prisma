@@ -94,15 +94,18 @@ model SavedPath {
 model ActivityLog {
   id        Int      @id @default(autoincrement())
   level     String   @default("info") // info, warn, error
-  category  String   // auth, file, agent, hierarchy, system
+  category  String   // auth, file, agent, hierarchy, system, user
   action    String   // login, upload, delete, connect, disconnect, etc.
   message   String
   meta      String?  // JSON string for extra context
   userId    Int?
   user      User?    @relation(fields: [userId], references: [id])
+  machineId Int?     // Optional: which machine this activity is about
   ipAddress String?
   createdAt DateTime @default(now())
 
   @@index([category])
   @@index([createdAt])
+  @@index([machineId])
+  @@index([userId])
 }

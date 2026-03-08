@@ -322,8 +322,18 @@ const FileSystem = () => {
             link.click();
             document.body.removeChild(link);
             window.URL.revokeObjectURL(objectUrl);
-        } catch {
-            showNotification('error', t('downloadFailed'));
+        } catch (err) {
+            // Blob responses need special handling to read the JSON error body
+            let msg = t('downloadFailed');
+            try {
+                const blob = err.response?.data;
+                if (blob instanceof Blob && blob.type?.includes('json')) {
+                    const text = await blob.text();
+                    const json = JSON.parse(text);
+                    if (json.error) msg = json.error;
+                }
+            } catch { /* ignore parse errors */ }
+            showNotification('error', msg);
         }
     };
 

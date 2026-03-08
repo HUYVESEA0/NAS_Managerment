@@ -70,15 +70,46 @@ const NotificationToast = () => {
     }, []);
 
     useEffect(() => {
-        const events = [
+        // Toast only for important real-time events (agent status + errors)
+        // Routine file ops go to history panel but don't pop a toast
+        const toastEvents = ['agent:online', 'agent:offline'];
+        const historyEvents = [
             'agent:online', 'agent:offline',
             'file:created', 'file:deleted', 'file:renamed', 'file:uploaded',
-            'hierarchy:changed', 'activity:new'
+            'hierarchy:changed'
         ];
-        const unsubs = events.map(evt =>
-            subscribe(evt, (data) => addToast(evt, data))
-        );
-        return () => unsubs.forEach(fn => fn());
+
+        // activity:new with level warn/error → toast
+        const unsubActivity = subscribe('activity:new', (data) => {
+            // Always add to history
+            const id = ++toastIdCounter;
+            const level = data.level || 'info';
+            const message = data.message || `${data.category}: ${data.action}`;
+            const entry = { id, event: 'activity:new', level, message, timestamp: Date.now() };
+            setHistory(prev => [entry, ...prev].slice(0, 100));
+            // Only toast if warn or error level
+            if (level === 'warn' || level === 'error') {
+                setToasts(prev => [...prev.slice(-4), entry]);
+                setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
+            }
+        });
+
+        const unsubs = [
+            unsubActivity,
+            ...toastEvents.map(evt =>
+                subscribe(evt, (data) => addToast(evt, data))
+            ),
+            ...historyEvents.filter(e => !toastEvents.includes(e)).map(evt =>
+                subscribe(evt, (data) => {
+                    const id = ++toastIdCounter;
+                    const level = levelFromEvent(evt);
+                    const message = formatEvent(evt, data, t);
+                    const entry = { id, event: evt, level, message, timestamp: Date.now() };
+                    setHistory(prev => [entry, ...prev].slice(0, 100));
+                })
+            ),
+        ];
+        return () => unsubs.forEach(fn => fn && fn());
     }, [subscribe, addToast]);
 
     // Close panel on outside click

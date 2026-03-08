@@ -17,6 +17,7 @@ const UserManagement = React.lazy(() => import('./pages/UserManagement'))
 const NetworkScanner = React.lazy(() => import('./pages/NetworkScanner'))
 const NetworkTopology = React.lazy(() => import('./pages/NetworkTopology'))
 const SystemStatus = React.lazy(() => import('./pages/SystemStatus'))
+const ActivityLog = React.lazy(() => import('./pages/ActivityLog'))
 
 const PageLoader = () => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-base)' }}>
@@ -90,6 +91,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     element={
                       <ProtectedRoute requirePermissions={['MANAGE_HIERARCHY']}>
                         <NetworkTopology />
+                      </ProtectedRoute>
+                    }
+                  />
+                  <Route
+                    path="logs"
+                    element={
+                      <ProtectedRoute requireAdmin={true}>
+                        <ActivityLog />
                       </ProtectedRoute>
                     }
                   />

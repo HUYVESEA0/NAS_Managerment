@@ -1051,6 +1051,58 @@ class NASAgent {
                 } catch (e) { result = { error: e.message }; }
                 break;
 
+            case 'download_file_stream': {
+                // Chunked streaming download — handles files of any size
+                const CHUNK_SIZE = 2 * 1024 * 1024; // 2 MB per chunk
+                const targetPath = params.path;
+                logger.info(`Stream download: ${targetPath}`);
+
+                if (configPaths && configPaths.length > 0) {
+                    const { allowed } = isPathAllowed(targetPath, configPaths);
+                    if (!allowed) {
+                        this._send({ type: 'response', requestId, error: `Access denied: '${targetPath}' is outside allowed paths` });
+                        return;
+                    }
+                }
+
+                let fileStat;
+                try {
+                    fileStat = await fs.promises.stat(targetPath);
+                } catch {
+                    this._send({ type: 'response', requestId, error: `File not found: ${targetPath}` });
+                    return;
+                }
+
+                if (fileStat.isDirectory()) {
+                    this._send({ type: 'response', requestId, error: 'Cannot download a directory' });
+                    return;
+                }
+
+                // Send metadata first so server can prepare the HTTP response
+                this._send({
+                    type: 'response',
+                    requestId,
+                    data: { status: 'streaming', size: fileStat.size, name: path.basename(targetPath) }
+                });
+
+                // Stream file in chunks
+                const readStream = fs.createReadStream(targetPath, { highWaterMark: CHUNK_SIZE });
+                readStream.on('data', (chunk) => {
+                    readStream.pause();
+                    this._send({ type: 'stream_chunk', requestId, data: chunk.toString('base64'), last: false });
+                    // Small delay to avoid flooding the WebSocket buffer
+                    setImmediate(() => readStream.resume());
+                });
+                readStream.on('end', () => {
+                    this._send({ type: 'stream_chunk', requestId, data: '', last: true });
+                    logger.info(`Stream download complete: ${targetPath}`);
+                });
+                readStream.on('error', (err) => {
+                    this._send({ type: 'response', requestId, error: `Read error: ${err.message}` });
+                });
+                return; // Skip normal result handling
+            }
+
             default:
                 result = { error: `Unknown action: ${action}` };
         }

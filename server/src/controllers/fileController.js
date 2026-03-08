@@ -119,29 +119,66 @@ exports.downloadFile = async (req, res) => {
         // === CHECK ADMIN STATUS ===
         const isAdminUser = req.user && (req.user.roleName === 'Admin' || req.user.permissions?.includes('ALL'));
 
-        // === PRIORITY 1: Agent WebSocket ===
+        // === PRIORITY 1: Agent WebSocket (chunked streaming — no size limit) ===
         if (!isMaster && agentManager.isAgentConnected(parseInt(machineId))) {
             try {
-                const result = await agentManager.sendRequest(parseInt(machineId), 'read_file', {
-                    path: filePath,
-                    isAdmin: isAdminUser
-                }, 30000);
-
-                if (result.content) {
-                    const fileName = path.basename(filePath);
-                    res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
-                    res.setHeader('Content-Type', 'application/octet-stream');
-                    const buffer = Buffer.from(result.content, 'base64');
-                    return res.send(buffer);
-                }
-
-                return res.status(404).json({ error: 'File not found on agent' });
+                const { stream, size, name } = await agentManager.streamDownload(
+                    parseInt(machineId), filePath, isAdminUser
+                );
+                const fileName = name || path.basename(filePath);
+                res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(fileName)}"`);
+                res.setHeader('Content-Type', 'application/octet-stream');
+                if (size) res.setHeader('Content-Length', size);
+                logActivity({ category: 'file', action: 'download', message: `Downloaded "${fileName}" from machine ${machineId}`, userId: req.user?.id, machineId: parseInt(machineId), ipAddress: req.ip, meta: { machineId, path: filePath } });
+                stream.on('error', () => { /* response may already be streaming */ });
+                return stream.pipe(res);
             } catch (agentError) {
-                return res.status(502).json({ error: `Agent Error: ${agentError.message}` });
+                const msg = agentError.message;
+                if (msg.includes('not found') || msg.includes('Not found')) {
+                    return res.status(404).json({ error: msg });
+                }
+                if (msg.includes('Access denied') || msg.includes('outside allowed') || msg.includes('directory')) {
+                    return res.status(400).json({ error: msg });
+                }
+                return res.status(502).json({ error: `Agent Error: ${msg}` });
             }
         }
 
-        // === PRIORITY 2 / PRIORITY 3: Local Simulation (master + fallback) ===
+        // === PRIORITY 2: SSH / SFTP ===
+        if (!isMaster && machine.ipAddress && machine.username && machine.password) {
+            const sshService = require('../utils/sshService');
+            try {
+                const { stream, size, name } = await sshService.downloadFile({
+                    host: machine.ipAddress,
+                    port: machine.port,
+                    username: machine.username,
+                    password: machine.password
+                }, filePath);
+
+                res.setHeader('Content-Disposition', `attachment; filename="${name}"`);
+                res.setHeader('Content-Type', 'application/octet-stream');
+                if (size) res.setHeader('Content-Length', size);
+                logActivity({ category: 'file', action: 'download', message: `Downloaded "${name}" from machine ${machineId} via SSH`, userId: req.user?.id, machineId: parseInt(machineId), ipAddress: req.ip, meta: { machineId, path: filePath } });
+                return stream.pipe(res);
+            } catch (sshError) {
+                console.error(`SSH Download Error on machine ${machineId}:`, sshError.message);
+                return res.status(503).json({ error: `Cannot download file: ${sshError.message}` });
+            }
+        }
+
+        // === PRIORITY 3: Local Simulation / Master Node ===
+        // For non-master machines, only use local simulation for relative/simulation paths.
+        // If the path looks like a real absolute path (has drive letter e.g. D:/...) and
+        // neither agent nor SSH is available, return a clear 503 instead of a confusing 404.
+        if (!isMaster) {
+            const isRealAbsolutePath = /^[a-zA-Z]:[/\\]/.test(filePath) || (filePath.startsWith('/') && filePath.length > 1);
+            if (isRealAbsolutePath) {
+                return res.status(503).json({
+                    error: `Machine ${machine.name || machineId} is offline and no SSH credentials are configured. Cannot download "${path.basename(filePath)}".`
+                });
+            }
+        }
+
         let absolutePath;
         if (isMaster) {
             absolutePath = path.isAbsolute(filePath) ? filePath : path.resolve(process.cwd(), filePath);
@@ -156,6 +193,7 @@ exports.downloadFile = async (req, res) => {
         const fileName = path.basename(absolutePath);
         res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
         res.setHeader('Content-Type', 'application/octet-stream');
+        logActivity({ category: 'file', action: 'download', message: `Downloaded "${fileName}" from machine ${machineId}`, userId: req.user?.id, machineId: isMaster ? null : parseInt(machineId), ipAddress: req.ip, meta: { machineId, path: filePath } });
         return res.sendFile(absolutePath);
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -180,7 +218,7 @@ exports.createDirectory = async (req, res) => {
             });
             if (result.error) return res.status(400).json({ error: result.error });
             notificationHub.broadcast('file:created', { machineId, path: dirPath });
-            logActivity({ category: 'file', action: 'create_directory', message: `Created directory "${dirPath}" on machine ${machineId}`, userId: req.user?.id, meta: { machineId, path: dirPath } });
+            logActivity({ category: 'file', action: 'create_directory', message: `Created directory "${dirPath}" on machine ${machineId}`, userId: req.user?.id, machineId: isMaster ? null : parseInt(machineId), ipAddress: req.ip, meta: { machineId, path: dirPath } });
             return res.json(result);
         }
 
@@ -194,7 +232,7 @@ exports.createDirectory = async (req, res) => {
         }
         fs.mkdirSync(absolutePath, { recursive: true });
         notificationHub.broadcast('file:created', { machineId, path: dirPath });
-        logActivity({ category: 'file', action: 'create_directory', message: `Created directory "${dirPath}" on machine ${machineId}`, userId: req.user?.id, meta: { machineId, path: dirPath } });
+        logActivity({ category: 'file', action: 'create_directory', message: `Created directory "${dirPath}" on machine ${machineId}`, userId: req.user?.id, machineId: isMaster ? null : parseInt(machineId), ipAddress: req.ip, meta: { machineId, path: dirPath } });
         return res.json({ success: true, path: dirPath });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -220,7 +258,7 @@ exports.renameItem = async (req, res) => {
             });
             if (result.error) return res.status(400).json({ error: result.error });
             notificationHub.broadcast('file:renamed', { machineId, oldPath: itemPath, newPath: newName });
-            logActivity({ category: 'file', action: 'rename', message: `Renamed "${itemPath}" to "${newName}" on machine ${machineId}`, userId: req.user?.id, meta: { machineId, oldPath: itemPath, newName } });
+            logActivity({ category: 'file', action: 'rename', message: `Renamed "${itemPath}" to "${newName}" on machine ${machineId}`, userId: req.user?.id, machineId: isMaster ? null : parseInt(machineId), ipAddress: req.ip, meta: { machineId, oldPath: itemPath, newName } });
             return res.json(result);
         }
 
@@ -237,7 +275,7 @@ exports.renameItem = async (req, res) => {
         if (!fs.existsSync(oldAbsolute)) return res.status(404).json({ error: 'Item not found' });
         fs.renameSync(oldAbsolute, newAbsolute);
         notificationHub.broadcast('file:renamed', { machineId, oldPath: itemPath, newPath: newName });
-        logActivity({ category: 'file', action: 'rename', message: `Renamed "${itemPath}" to "${newName}" on machine ${machineId}`, userId: req.user?.id, meta: { machineId, oldPath: itemPath, newName } });
+        logActivity({ category: 'file', action: 'rename', message: `Renamed "${itemPath}" to "${newName}" on machine ${machineId}`, userId: req.user?.id, machineId: isMaster ? null : parseInt(machineId), ipAddress: req.ip, meta: { machineId, oldPath: itemPath, newName } });
         return res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -262,7 +300,7 @@ exports.deleteItem = async (req, res) => {
             });
             if (result.error) return res.status(400).json({ error: result.error });
             notificationHub.broadcast('file:deleted', { machineId, path: itemPath });
-            logActivity({ category: 'file', action: 'delete', message: `Deleted "${itemPath}" on machine ${machineId}`, userId: req.user?.id, meta: { machineId, path: itemPath } });
+            logActivity({ category: 'file', action: 'delete', message: `Deleted "${itemPath}" on machine ${machineId}`, userId: req.user?.id, machineId: isMaster ? null : parseInt(machineId), ipAddress: req.ip, meta: { machineId, path: itemPath } });
             return res.json(result);
         }
 
@@ -282,7 +320,7 @@ exports.deleteItem = async (req, res) => {
             fs.unlinkSync(absolutePath);
         }
         notificationHub.broadcast('file:deleted', { machineId, path: itemPath });
-        logActivity({ category: 'file', action: 'delete', message: `Deleted "${itemPath}" on machine ${machineId}`, userId: req.user?.id, meta: { machineId, path: itemPath } });
+        logActivity({ category: 'file', action: 'delete', message: `Deleted "${itemPath}" on machine ${machineId}`, userId: req.user?.id, machineId: isMaster ? null : parseInt(machineId), ipAddress: req.ip, meta: { machineId, path: itemPath } });
         return res.json({ success: true });
     } catch (error) {
         res.status(500).json({ error: error.message });
@@ -318,7 +356,7 @@ exports.uploadFile = async (req, res) => {
             }, 60000);
             if (result.error) return res.status(400).json({ error: result.error });
             notificationHub.broadcast('file:uploaded', { machineId, path: targetPath });
-            logActivity({ category: 'file', action: 'upload', message: `Uploaded "${file.originalname}" to machine ${machineId}`, userId: req.user?.id, meta: { machineId, path: targetPath, size: file.size } });
+            logActivity({ category: 'file', action: 'upload', message: `Uploaded "${file.originalname}" to machine ${machineId}`, userId: req.user?.id, machineId: isMaster ? null : parseInt(machineId), ipAddress: req.ip, meta: { machineId, path: targetPath, size: file.size } });
             return res.json({ success: true, path: targetPath });
         }
 
@@ -338,7 +376,7 @@ exports.uploadFile = async (req, res) => {
         fs.writeFileSync(targetFile, file.buffer);
 
         notificationHub.broadcast('file:uploaded', { machineId, path: resultPath });
-        logActivity({ category: 'file', action: 'upload', message: `Uploaded "${file.originalname}" to machine ${machineId}`, userId: req.user?.id, meta: { machineId, path: resultPath, size: file.size } });
+        logActivity({ category: 'file', action: 'upload', message: `Uploaded "${file.originalname}" to machine ${machineId}`, userId: req.user?.id, machineId: isMaster ? null : parseInt(machineId), ipAddress: req.ip, meta: { machineId, path: resultPath, size: file.size } });
         return res.json({ success: true, path: resultPath });
     } catch (error) {
         console.error('Upload Error:', error);

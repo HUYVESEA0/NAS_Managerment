@@ -76,6 +76,10 @@ class AgentManager {
                     this._handleResponse(message);
                     break;
 
+                case 'stream_chunk':
+                    this._handleStreamChunk(message);
+                    break;
+
                 case 'heartbeat':
                     ws._isAlive = true;
                     this._sendToAgent(ws, { type: 'heartbeat_ack' });
@@ -206,14 +210,85 @@ class AgentManager {
             return;
         }
 
+        if (error) {
+            clearTimeout(pending.timeout);
+            this.pendingRequests.delete(requestId);
+            pending.reject(new Error(error));
+            return;
+        }
+
+        // Streaming response: don't clear pending — chunks will follow
+        if (data && data.status === 'streaming') {
+            if (pending.onStreamStart) {
+                pending.onStreamStart(data);
+            }
+            return;
+        }
+
         clearTimeout(pending.timeout);
         this.pendingRequests.delete(requestId);
+        pending.resolve(data);
+    }
 
-        if (error) {
-            pending.reject(new Error(error));
-        } else {
-            pending.resolve(data);
+    /**
+     * Xử lý từng chunk dữ liệu file từ agent
+     */
+    _handleStreamChunk(message) {
+        const { requestId, data, last } = message;
+        const pending = this.pendingRequests.get(requestId);
+        if (!pending || !pending.onChunk) return;
+
+        if (data) {
+            pending.onChunk(Buffer.from(data, 'base64'), !!last);
         }
+
+        if (last) {
+            clearTimeout(pending.timeout);
+            this.pendingRequests.delete(requestId);
+        }
+    }
+
+    /**
+     * Stream download file từ agent theo từng chunk (không bị giới hạn kích thước)
+     * @returns {Promise<{ stream: PassThrough, size: number, name: string }>}
+     */
+    streamDownload(machineId, filePath, isAdmin = false) {
+        const { PassThrough } = require('stream');
+        return new Promise((resolve, reject) => {
+            const agent = this.agents.get(machineId);
+            if (!agent || agent.ws.readyState !== WebSocket.OPEN) {
+                return reject(new Error('Agent not connected'));
+            }
+
+            const requestId = `req_${++this.requestCounter}_${Date.now()}`;
+            const passThrough = new PassThrough();
+
+            const timeout = setTimeout(() => {
+                this.pendingRequests.delete(requestId);
+                passThrough.destroy(new Error('Stream timed out'));
+                reject(new Error('Agent stream timed out'));
+            }, 300000); // 5 minutes for large files
+
+            this.pendingRequests.set(requestId, {
+                resolve,
+                reject,
+                timeout,
+                onStreamStart: (meta) => {
+                    resolve({ stream: passThrough, size: meta.size, name: meta.name });
+                },
+                onChunk: (buffer, last) => {
+                    if (buffer.length > 0) passThrough.write(buffer);
+                    if (last) passThrough.end();
+                }
+            });
+
+            this._sendToAgent(agent.ws, {
+                type: 'request',
+                requestId,
+                action: 'download_file_stream',
+                params: { path: filePath, isAdmin }
+            });
+        });
     }
 
     /**
