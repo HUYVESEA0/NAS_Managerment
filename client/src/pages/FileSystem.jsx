@@ -307,24 +307,22 @@ const FileSystem = () => {
     };
 
 
-    const handleDownload = (file) => {
+    const handleDownload = async (file) => {
         if (!file || file.isDirectory) return;
         try {
-            // Use axios baseURL if available, or relative
-            // The api instance has baseURL set. We need to access it or construct manually.
-            // Assuming api.defaults.baseURL is set properly. 
-            // If not, use relative path '/api/files/download'
-            const baseUrl = api.defaults.baseURL || '/api';
-            const url = `${baseUrl}/files/download?machineId=${machineId}&path=${encodeURIComponent(file.path)}`;
-
-            // Trigger download
+            const response = await api.get('/files/download', {
+                params: { machineId, path: file.path },
+                responseType: 'blob'
+            });
+            const objectUrl = window.URL.createObjectURL(response.data);
             const link = document.createElement('a');
-            link.href = url;
+            link.href = objectUrl;
             link.download = file.name;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
-        } catch (e) {
+            window.URL.revokeObjectURL(objectUrl);
+        } catch {
             showNotification('error', t('downloadFailed'));
         }
     };
