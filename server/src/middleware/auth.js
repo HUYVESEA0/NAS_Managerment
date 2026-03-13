@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const prisma = require('../utils/prisma');
+const { logActivity } = require('../utils/activityService');
 
 const SECRET_KEY = process.env.JWT_SECRET || 'secret_dev_key';
 
@@ -82,6 +83,113 @@ const authorize = (...requiredPermissions) => {
 };
 
 /**
+ * Extract machine IDs from request (query/body/params).
+ * Supports: machineId, fromMachineId, toMachineId, :machineId
+ */
+function extractMachineIds(req) {
+    const ids = [];
+    const sources = [req.params || {}, req.query || {}, req.body || {}];
+    const keys = ['machineId', 'fromMachineId', 'toMachineId'];
+
+    for (const src of sources) {
+        for (const key of keys) {
+            if (src[key] !== undefined && src[key] !== null && src[key] !== '') {
+                ids.push(String(src[key]));
+            }
+        }
+    }
+
+    return [...new Set(ids)];
+}
+
+/**
+ * Machine-level scope guard.
+ * - Admin/ALL: always allow
+ * - Non-admin: if permissions contain MACHINE:<id>, request machineIds must be in that set.
+ * - If no MACHINE:* permissions:
+ *    + ENFORCE_MACHINE_SCOPES=true => deny
+ *    + otherwise allow (backward compatible)
+ */
+const authorizeMachineScope = () => {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({ error: 'Authentication required.' });
+        }
+
+        const userPermissions = req.user.permissions || [];
+        if (userPermissions.includes('ALL') || req.user.roleName === 'Admin') {
+            return next();
+        }
+
+        const machineIds = extractMachineIds(req);
+        if (machineIds.length === 0) {
+            return next();
+        }
+
+        // Validate IDs format
+        for (const id of machineIds) {
+            if (id !== 'master' && !/^\d+$/.test(id)) {
+                logActivity({
+                    level: 'warn',
+                    category: 'auth',
+                    action: 'machine_scope_invalid_id',
+                    message: `Invalid machineId format blocked for user "${req.user?.username}"`,
+                    userId: req.user?.id,
+                    ipAddress: req.ip,
+                    meta: { machineId: id, path: req.originalUrl }
+                });
+                return res.status(400).json({ error: `Invalid machineId: ${id}` });
+            }
+        }
+
+        const scopedMachineIds = new Set(
+            userPermissions
+                .map(p => {
+                    const m = String(p).match(/^MACHINE:(\d+)$/);
+                    return m ? m[1] : null;
+                })
+                .filter(Boolean)
+        );
+
+        const enforceScopes = String(process.env.ENFORCE_MACHINE_SCOPES || '').toLowerCase() === 'true';
+        if (scopedMachineIds.size === 0) {
+            if (enforceScopes) {
+                logActivity({
+                    level: 'warn',
+                    category: 'auth',
+                    action: 'machine_scope_missing',
+                    message: `Machine-scoped access blocked for user "${req.user?.username}" (no MACHINE:* permissions)`,
+                    userId: req.user?.id,
+                    ipAddress: req.ip,
+                    meta: { machineIds, path: req.originalUrl }
+                });
+                return res.status(403).json({ error: 'Machine scope not configured for this user.' });
+            }
+            return next();
+        }
+
+        const forbidden = machineIds.filter(id => id !== 'master' && !scopedMachineIds.has(id));
+        if (forbidden.length > 0) {
+            logActivity({
+                level: 'warn',
+                category: 'auth',
+                action: 'machine_scope_denied',
+                message: `Machine access denied for user "${req.user?.username}"`,
+                userId: req.user?.id,
+                ipAddress: req.ip,
+                meta: { forbiddenMachineIds: forbidden, path: req.originalUrl }
+            });
+            return res.status(403).json({
+                error: 'Forbidden. Machine access denied.',
+                machineIds: forbidden
+            });
+        }
+
+        next();
+    };
+};
+
+/**
  * Middleware chỉ cho phép Admin
  */
 const adminOnly = (req, res, next) => {
@@ -97,4 +205,4 @@ const adminOnly = (req, res, next) => {
     next();
 };
 
-module.exports = { authenticate, authorize, adminOnly };
+module.exports = { authenticate, authorize, adminOnly, authorizeMachineScope };

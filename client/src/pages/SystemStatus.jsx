@@ -1,15 +1,20 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Cpu, HardDrive, Wifi, Server, Play, Square, RefreshCw, Terminal, Clock, MemoryStick } from 'lucide-react';
+import { Activity, Cpu, HardDrive, Wifi, Server, Play, Square, RefreshCw, Terminal, Clock, MemoryStick, XCircle, AlertTriangle, X } from 'lucide-react';
 import api from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
+import { useAuth } from '../contexts/AuthContext';
 
 const SystemStatus = () => {
     const { t } = useLanguage();
+    const { isAdmin } = useAuth();
     const [info, setInfo] = useState(null);
     const [stats, setStats] = useState(null);
     const [processes, setProcesses] = useState(null);
     const [loading, setLoading] = useState(true);
     const [lastUpdate, setLastUpdate] = useState(new Date());
+    const [killConfirm, setKillConfirm] = useState(null); // { pid, name }
+    const [killing, setKilling] = useState(false);
+    const [killMsg, setKillMsg] = useState(null);
 
     const fetchAllData = async () => {
         try {
@@ -35,6 +40,23 @@ const SystemStatus = () => {
         const interval = setInterval(fetchAllData, 5000);
         return () => clearInterval(interval);
     }, []);
+
+    const handleKillProcess = async () => {
+        if (!killConfirm) return;
+        setKilling(true);
+        try {
+            await api.delete(`/system/processes/${killConfirm.pid}`);
+            setKillMsg({ type: 'success', text: `${t('processKilled') || 'Process killed'}: ${killConfirm.name} (PID ${killConfirm.pid})` });
+            setKillConfirm(null);
+            setTimeout(() => { setKillMsg(null); fetchAllData(); }, 2000);
+        } catch (err) {
+            setKillMsg({ type: 'error', text: err.response?.data?.error || 'Failed to kill process' });
+            setTimeout(() => setKillMsg(null), 3000);
+            setKillConfirm(null);
+        } finally {
+            setKilling(false);
+        }
+    };
 
     const formatBytes = (bytes, decimals = 2) => {
         if (!+bytes) return '0 Bytes';
@@ -185,6 +207,12 @@ const SystemStatus = () => {
                             Total: {processes?.all} | {t('running')}: {processes?.running}
                         </span>
                     </div>
+                    {/* Kill message toast */}
+                    {killMsg && (
+                        <div style={{ fontSize: 12, padding: '5px 12px', borderRadius: 8, background: killMsg.type === 'success' ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)', color: killMsg.type === 'success' ? '#34D399' : '#F87171', border: `1px solid ${killMsg.type === 'success' ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'}` }}>
+                            {killMsg.text}
+                        </div>
+                    )}
                 </div>
 
                 <div style={{ overflowX: 'auto', maxHeight: 500, overflowY: 'auto' }}>
@@ -196,6 +224,7 @@ const SystemStatus = () => {
                                 <th style={{ padding: '12px 20px', color: 'var(--text-muted)', fontWeight: 500 }}>{t('user')}</th>
                                 <th style={{ padding: '12px 20px', color: 'var(--text-muted)', fontWeight: 500, textAlign: 'right' }}>{t('cpuPercent')}</th>
                                 <th style={{ padding: '12px 20px', color: 'var(--text-muted)', fontWeight: 500, textAlign: 'right' }}>{t('memPercent')}</th>
+                                {isAdmin && <th style={{ padding: '12px 20px', width: 60 }}></th>}
                             </tr>
                         </thead>
                         <tbody>
@@ -212,6 +241,16 @@ const SystemStatus = () => {
                                         <td style={{ padding: '10px 20px', color: 'var(--text-muted)' }}>{proc.user || '--'}</td>
                                         <td style={{ padding: '10px 20px', textAlign: 'right', color: highCpu ? '#F87171' : '#34D399' }}>{proc.cpu}</td>
                                         <td style={{ padding: '10px 20px', textAlign: 'right', color: highMem ? '#F87171' : 'var(--accent-blue)' }}>{proc.mem}</td>
+                                        {isAdmin && (
+                                            <td style={{ padding: '10px 14px' }}>
+                                                <button onClick={() => setKillConfirm({ pid: proc.pid, name: proc.name })}
+                                                    title={t('killProcess') || 'Kill Process'}
+                                                    style={{ padding: '4px 6px', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', borderRadius: 5, display: 'flex', alignItems: 'center' }}
+                                                    onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.12)'; e.currentTarget.style.color = '#F87171'; }}
+                                                    onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                                                ><XCircle size={13} /></button>
+                                            </td>
+                                        )}
                                     </tr>
                                 )
                             })}
@@ -219,6 +258,34 @@ const SystemStatus = () => {
                     </table>
                 </div>
             </div>
+
+            {/* Kill Confirm Modal */}
+            {killConfirm && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)' }}
+                    onClick={() => !killing && setKillConfirm(null)}>
+                    <div className="animate-fadeUp" style={{ background: 'var(--bg-elevated)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 14, width: '100%', maxWidth: 380, padding: 24, boxShadow: 'var(--shadow-elevated)' }}
+                        onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                            <AlertTriangle size={18} color="#F87171" />
+                            <h3 style={{ fontSize: 15, fontWeight: 600, color: '#F87171', margin: 0, fontFamily: "'Fira Code', monospace" }}>{t('killProcess') || 'Kill Process'}</h3>
+                        </div>
+                        <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 20, lineHeight: 1.5 }}>
+                            {t('confirmKillProcess') || 'Terminate process'} <strong style={{ color: 'white', fontFamily: "'Fira Code', monospace" }}>{killConfirm.name}</strong> (PID <code style={{ color: '#F87171' }}>{killConfirm.pid}</code>)?
+                        </p>
+                        <div style={{ display: 'flex', gap: 8 }}>
+                            <button onClick={() => setKillConfirm(null)} disabled={killing}
+                                style={{ flex: 1, padding: '9px', background: 'var(--bg-hover)', border: '1px solid var(--border-default)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                                {t('cancel')}
+                            </button>
+                            <button onClick={handleKillProcess} disabled={killing}
+                                style={{ flex: 1, padding: '9px', background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.4)', borderRadius: 8, fontSize: 13, fontWeight: 600, color: '#F87171', cursor: killing ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                                {killing ? <div style={{ width: 13, height: 13, border: '2px solid #F87171', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> : <XCircle size={13} />}
+                                {t('killProcess') || 'Kill'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
 
         </div>
     );

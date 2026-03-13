@@ -1,6 +1,26 @@
 const prisma = require('../utils/prisma');
 const notificationHub = require('../utils/notificationHub');
 const { logActivity } = require('../utils/activityService');
+const { encryptSecret } = require('../utils/credentialCrypto');
+
+// Flat list of all machines (for filters, dropdowns)
+exports.getMachines = async (req, res) => {
+    try {
+        const machines = await prisma.machine.findMany({
+            include: { room: { include: { floor: true } } },
+            orderBy: { name: 'asc' }
+        });
+        res.json(machines.map(m => ({
+            id: m.id,
+            name: m.name,
+            ipAddress: m.ipAddress || null,
+            roomName: m.room?.name || null,
+            floorName: m.room?.floor?.name || null
+        })));
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
 
 const broadcastHierarchy = (action, entityType, entityId) => {
     notificationHub.broadcast('hierarchy:changed', { action, entityType, entityId });
@@ -211,7 +231,7 @@ exports.createMachine = async (req, res) => {
                 ipAddress,
                 roomId: parsedRoomId,
                 username,
-                password,
+                password: password ? encryptSecret(password) : null,
                 port: port ? parseInt(port) : 22,
                 status: 'online'
             }
@@ -233,7 +253,7 @@ exports.updateMachine = async (req, res) => {
         if (name) updateData.name = name;
         if (ipAddress) updateData.ipAddress = ipAddress;
         if (username) updateData.username = username;
-        if (password) updateData.password = password; // Should encrypt
+        if (password !== undefined) updateData.password = password ? encryptSecret(password) : null;
         if (port) updateData.port = parseInt(port);
         if (status) updateData.status = status;
         if (roomId) updateData.roomId = parseInt(roomId);

@@ -1,14 +1,14 @@
 @echo off
 setlocal EnableDelayedExpansion
-title NAS Manager — Server Package Builder
+title NASHub — Server Package Builder
 
 cls
 echo.
 echo  ================================================================
-echo    NAS MANAGER — SERVER PACKAGE BUILDER
+echo    NASHUB — SERVER PACKAGE BUILDER
 echo  ================================================================
 echo    Tao goi cai dat Offline de mang sang may Doanh Nghiep.
- echo    Yeu cau: May nay phai co internet + da cai Node.js + dependencies.
+echo    Yeu cau: May nay phai co internet + da cai Node.js + dependencies.
 echo  ================================================================
 echo.
 

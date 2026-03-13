@@ -2,7 +2,7 @@
 
 /**
  * ╔══════════════════════════════════════════════════════════╗
- * ║           NAS Manager Agent v2.0                         ║
+ * ║                NASHub Agent v2.0                         ║
  * ║  Chạy trên máy remote để chia sẻ thư mục với server     ║
  * ║  Hỗ trợ: SSH check, auto-bind, file ops, search, preview║
  * ╚══════════════════════════════════════════════════════════════╝
@@ -23,6 +23,7 @@
  */
 
 const WebSocket = require('ws');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -353,7 +354,7 @@ async function runDiagnostics(sshPort = 22) {
 
 async function runSetup(config) {
     console.log('\n╔══════════════════════════════════════════════════════════╗');
-    console.log('║           NAS Manager Agent — Setup Wizard               ║');
+    console.log('║              NASHub Agent — Setup Wizard                 ║');
     console.log('╚══════════════════════════════════════════════════════════════╝\n');
 
     // Step 1: System diagnostics
@@ -837,7 +838,7 @@ class NASAgent {
         }
 
         this.ws.on('open', () => {
-            logger.info('Connected to NAS Server');
+            logger.info('Connected to NASHub Server');
             this.reconnectDelay = 2000;
 
             // Register with server — bao gồm thông tin SSH + network
@@ -920,6 +921,14 @@ class NASAgent {
                     break;
 
                 case 'request':
+                    if (!this._verifyRequestSecurity(message)) {
+                        this._send({
+                            type: 'response',
+                            requestId: message.requestId,
+                            error: 'Invalid request signature'
+                        });
+                        return;
+                    }
                     this._handleRequest(message);
                     break;
 
@@ -932,6 +941,31 @@ class NASAgent {
         } catch (err) {
             logger.error('Error parsing message', { error: err.message });
         }
+    }
+
+    _verifyRequestSecurity(message) {
+        const secret = process.env.WS_AGENT_SHARED_SECRET;
+        if (!secret) return true; // Backward compatibility when shared secret is not configured
+
+        const sec = message.security || {};
+        if (!sec.ts || !sec.sig) {
+            logger.warn('Rejected unsigned request', { requestId: message.requestId, action: message.action });
+            return false;
+        }
+
+        const skewMs = Math.abs(Date.now() - Number(sec.ts));
+        if (Number.isNaN(skewMs) || skewMs > 5 * 60 * 1000) {
+            logger.warn('Rejected request outside signature time window', { requestId: message.requestId, action: message.action });
+            return false;
+        }
+
+        const payload = `${message.requestId}|${message.action}|${sec.ts}|${JSON.stringify(message.params || {})}`;
+        const expectedHex = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+        const expected = Buffer.from(expectedHex, 'hex');
+        const actual = Buffer.from(String(sec.sig), 'hex');
+        if (expected.length !== actual.length) return false;
+
+        return crypto.timingSafeEqual(expected, actual);
     }
 
     async _handleRequest(message) {
@@ -1038,11 +1072,12 @@ class NASAgent {
                 try {
                     logger.info(`Write file: ${params.path}`, { size: `${(params.content.length * 0.75 / 1024).toFixed(1)} KB` });
                     if (!params.path || !params.content) throw new Error('Path and content required');
+                    const writePath = path.normalize(params.path.replace(/\/+/g, '/').replace(/\\+/g, '\\'));
                     if (configPaths && configPaths.length > 0) {
-                        const { allowed } = isPathAllowed(params.path, configPaths);
+                        const { allowed } = isPathAllowed(writePath, configPaths);
                         if (!allowed) throw new Error(`Access denied: outside allowed paths`);
                     }
-                    const target = path.isAbsolute(params.path) ? params.path : path.resolve(process.cwd(), params.path);
+                    const target = path.isAbsolute(writePath) ? writePath : path.resolve(process.cwd(), writePath);
                     const dir = path.dirname(target);
                     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
                     const buffer = Buffer.from(params.content, 'base64');
@@ -1051,10 +1086,45 @@ class NASAgent {
                 } catch (e) { result = { error: e.message }; }
                 break;
 
+            case 'receive_file_stream': {
+                // Receive incoming file sent chunk-by-chunk from server relay
+                // params: { path, chunkIndex, totalChunks, data (base64), complete }
+                try {
+                    if (!params.path) throw new Error('Path required');
+                    // Normalize: collapse double slashes, convert forward→back on Windows
+                    const recvPath = path.normalize(params.path.replace(/\/+/g, '/').replace(/\\+/g, '\\'));
+                    if (configPaths && configPaths.length > 0) {
+                        const { allowed } = isPathAllowed(recvPath, configPaths);
+                        if (!allowed) throw new Error(`Access denied: '${recvPath}' is outside allowed paths`);
+                    }
+                    const absPath = path.isAbsolute(recvPath) ? recvPath : path.resolve(process.cwd(), recvPath);
+                    const dir = path.dirname(absPath);
+                    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+
+                    const chunkBuf = Buffer.from(params.data || '', 'base64');
+
+                    if (params.chunkIndex === 0 && !params.append) {
+                        // First chunk — (over)write file
+                        fs.writeFileSync(absPath, chunkBuf);
+                    } else {
+                        // Subsequent chunks — append
+                        fs.appendFileSync(absPath, chunkBuf);
+                    }
+
+                    if (params.complete) {
+                        logger.info(`receive_file_stream complete: ${absPath}`);
+                        result = { success: true, path: absPath };
+                    } else {
+                        result = { success: true, chunkIndex: params.chunkIndex };
+                    }
+                } catch (e) { result = { error: e.message }; }
+                break;
+            }
+
             case 'download_file_stream': {
                 // Chunked streaming download — handles files of any size
                 const CHUNK_SIZE = 2 * 1024 * 1024; // 2 MB per chunk
-                const targetPath = params.path;
+                const targetPath = path.normalize((params.path || '').replace(/\/+/g, '/').replace(/\\+/g, '\\'));
                 logger.info(`Stream download: ${targetPath}`);
 
                 if (configPaths && configPaths.length > 0) {
@@ -1134,7 +1204,7 @@ class NASAgent {
         const ips = this.diagnosticsCache?.ips || [];
 
         console.log('\n' + '═'.repeat(55));
-        console.log('  NAS Agent v2.0 — Status');
+        console.log('  NASHub Agent v2.0 — Status');
         console.log('═'.repeat(55));
         console.log(`  Machine ID:   ${this.config.machineId || 'Not assigned'}`);
         console.log(`  Agent Name:   ${this.config.name}`);
@@ -1187,8 +1257,8 @@ async function main() {
     const config = parseArgs();
 
     console.log('╔══════════════════════════════════════════════════════════╗');
-    console.log('║           NAS Manager Agent v2.0                         ║');
-    console.log('╚══════════════════════════════════════════════════════════════╝');
+    console.log('║                   NASHub Agent v2.0                      ║');
+    console.log('╚══════════════════════════════════════════════════════════╝');
 
     // Setup mode — chỉ cấu hình, không chạy agent
     if (config.setup) {

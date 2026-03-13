@@ -1,11 +1,11 @@
 @echo off
 setlocal EnableDelayedExpansion
-title NAS Manager — Client Connect Package Builder
+title NASHub — Client Connect Package Builder
 
 cls
 echo.
 echo  ================================================================
-echo    NAS MANAGER — CLIENT CONNECT PACKAGE BUILDER
+echo    NASHUB — CLIENT CONNECT PACKAGE BUILDER
 echo  ================================================================
 echo    Tao goi cai dat Offline cho cac may NAS (Agent).
 echo    Yeu cau: May nay phai co internet va da cai dependencies.

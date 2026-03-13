@@ -1,10 +1,16 @@
 const prisma = require('../utils/prisma');
 const agentManager = require('../utils/agentManager');
 const sshService = require('../utils/sshService');
+const { decryptSecret } = require('../utils/credentialCrypto');
 const { exec } = require('child_process');
 const os = require('os');
 const net = require('net');
 const dns = require('dns').promises;
+
+function getDecryptedMachinePassword(machine) {
+    if (!machine?.password) return null;
+    return decryptSecret(machine.password);
+}
 
 /**
  * Tìm kiếm files trên machine (SSH hoặc Agent)
@@ -40,12 +46,13 @@ exports.searchFiles = async (req, res) => {
         }
 
         // === SSH ===
-        if (machine.ipAddress && machine.username && machine.password) {
+        const machinePassword = getDecryptedMachinePassword(machine);
+        if (machine.ipAddress && machine.username && machinePassword) {
             const sshConfig = {
                 host: machine.ipAddress,
                 port: machine.port || 22,
                 username: machine.username,
-                password: machine.password
+                password: machinePassword
             };
 
             // Build find command
@@ -127,8 +134,9 @@ exports.searchGlobalFiles = async (req, res) => {
                     return;
                 }
 
-                if (machine.ipAddress && machine.username && machine.password) {
-                    const sshConfig = { host: machine.ipAddress, port: machine.port || 22, username: machine.username, password: machine.password };
+                const machinePassword = getDecryptedMachinePassword(machine);
+                if (machine.ipAddress && machine.username && machinePassword) {
+                    const sshConfig = { host: machine.ipAddress, port: machine.port || 22, username: machine.username, password: machinePassword };
                     let findCmd = `find /home /mnt /media /srv /var/www -maxdepth 5`;
                     if (type === 'file') findCmd += ' -type f';
                     if (query) findCmd += ` -iname "*${query}*"`;
@@ -461,12 +469,13 @@ exports.previewFile = async (req, res) => {
         }
 
         // SSH
-        if (machine.ipAddress && machine.username && machine.password) {
+        const machinePassword = getDecryptedMachinePassword(machine);
+        if (machine.ipAddress && machine.username && machinePassword) {
             const sshConfig = {
                 host: machine.ipAddress,
                 port: machine.port || 22,
                 username: machine.username,
-                password: machine.password
+                password: machinePassword
             };
 
             if (previewType === 'text') {

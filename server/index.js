@@ -1,6 +1,8 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const http = require('http');
 const history = require('connect-history-api-fallback');
@@ -12,9 +14,43 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const isProd = process.env.NODE_ENV === 'production';
 
-// 1. Middleware Cơ Bản
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
+// 1. Security Middleware
+app.use(helmet({
+    contentSecurityPolicy: false,      // Disabled — React SPA manages its own CSP
+    crossOriginEmbedderPolicy: false   // Required for some browser APIs
+}));
+
+// CORS: restrict to configured origin in production
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+    ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim())
+    : null;
+const corsOptions = isProd && allowedOrigins
+    ? { origin: allowedOrigins, credentials: true }
+    : { origin: true, credentials: true };
+app.use(cors(corsOptions));
+
+app.use(express.json({ limit: '10mb' }));
+
+// Rate Limiting
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 1000,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please try again later.' }
+});
+const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many login attempts, please try again later.' },
+    skipSuccessfulRequests: true
+});
+
+// Apply login limiter BEFORE generic API limiter
+app.use('/api/auth/login', loginLimiter);
+app.use('/api', apiLimiter);
 
 // 2. API Routes (Đặt TRƯỚC history fallback)
 const apiRoutes = require('./src/routes');
@@ -107,7 +143,7 @@ async function start() {
 
     const networkIP = getNetworkIP();
     server.listen(PORT, '0.0.0.0', () => {
-        console.log(`\n🚀 NAS SERVER ONLINE [${process.env.NODE_ENV}]`);
+        console.log(`\n🚀 NASHub SERVER ONLINE [${process.env.NODE_ENV}]`);
         console.log(`   Local:   http://localhost:${PORT}`);
         console.log(`   Network: http://${networkIP}:${PORT}`);
         console.log(`   Agent:   ws://${networkIP}:${PORT}/ws/agent`);

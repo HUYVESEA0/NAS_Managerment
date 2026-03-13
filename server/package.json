@@ -1,7 +1,7 @@
 {
-  "name": "nas-manager-server",
+  "name": "nashub-server",
   "version": "1.0.0-beta",
-  "description": "NAS Manager Backend Server",
+  "description": "NASHub Backend Server",
   "main": "index.js",
   "scripts": {
     "dev": "nodemon index.js",

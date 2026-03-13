@@ -1,6 +1,7 @@
 const si = require('systeminformation');
 const os = require('os');
 const child_process = require('child_process');
+const { logActivity } = require('../utils/activityService');
 
 exports.getSystemInfo = async (req, res) => {
     try {
@@ -118,5 +119,21 @@ exports.getProcesses = async (req, res) => {
     } catch (err) {
         console.error('Lỗi lấy Processes:', err);
         res.status(500).json({ error: 'Failed to retrieve processes' });
+    }
+};
+
+exports.killProcess = async (req, res) => {
+    try {
+        const pid = parseInt(req.params.pid);
+        if (!pid || isNaN(pid)) return res.status(400).json({ error: 'Invalid PID' });
+        if (pid === process.pid) return res.status(400).json({ error: 'Cannot kill the server process itself' });
+
+        process.kill(pid, 'SIGTERM');
+        logActivity({ level: 'warn', category: 'system', action: 'kill_process', message: `Process ${pid} terminated`, userId: req.user?.id, ipAddress: req.ip, meta: { pid } });
+        res.json({ success: true, pid });
+    } catch (err) {
+        if (err.code === 'ESRCH') return res.status(404).json({ error: `Process ${req.params.pid} not found` });
+        if (err.code === 'EPERM') return res.status(403).json({ error: `Permission denied to kill process ${req.params.pid}` });
+        res.status(500).json({ error: err.message });
     }
 };

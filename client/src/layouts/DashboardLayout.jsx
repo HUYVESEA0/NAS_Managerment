@@ -89,7 +89,7 @@ const DashboardLayout = () => {
     const pageTitleLabel = pageTitle ? t(pageTitle.labelKey) : t('overview');
 
     useEffect(() => {
-        document.title = `${pageTitleLabel} — NAS Manager`;
+        document.title = `${pageTitleLabel} — NASHub`;
     }, [pageTitleLabel]);
 
     return (

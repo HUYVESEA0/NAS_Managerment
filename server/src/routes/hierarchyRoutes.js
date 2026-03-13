@@ -9,6 +9,9 @@ router.use(authenticate);
 // Get full tree — mọi user đều xem được
 router.get('/', hierarchyController.getFullHierarchy);
 
+// Flat machine list for filters/dropdowns
+router.get('/machines', hierarchyController.getMachines);
+
 // Create/Update/Delete — cần quyền WRITE hoặc MANAGE
 router.post('/floors', authorize('MANAGE_HIERARCHY', 'WRITE_HIERARCHY'), hierarchyController.createFloor);
 router.put('/floors/:id', authorize('MANAGE_HIERARCHY', 'WRITE_HIERARCHY'), hierarchyController.updateFloor);

@@ -5,7 +5,8 @@ import {
     Filter, Grid, List, Eye, X, Image, FileCode, File, Music,
     Video, Archive, Database, Settings2, RefreshCw,
     XCircle, Terminal, UploadCloud, Loader2, CheckCircle, Plus,
-    SlidersHorizontal, ChevronDown, Clock, HardDrive, Server, MapPin, Network, Home, Star
+    SlidersHorizontal, ChevronDown, Clock, HardDrive, Server, MapPin, Network, Home, Star,
+    Send, ArrowRightLeft, Pencil
 } from 'lucide-react';
 import api from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
@@ -121,7 +122,25 @@ const FileSystem = () => {
     const [previewFile, setPreviewFile] = useState(null);
     const [previewData, setPreviewData] = useState(null);
     const [previewLoading, setPreviewLoading] = useState(false);
+
+    // File editor
+    const [editModal, setEditModal] = useState(null); // { file } | null
+    const [editContent, setEditContent] = useState('');
+    const [editLoading, setEditLoading] = useState(false);
+    const [editSaving, setEditSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
+
+    // Downloads: Map<filePath, { name, progress, status, loaded, cancel, errorMsg }>
+    const [downloads, setDownloads] = useState(new Map());
+    const [showDownloadPanel, setShowDownloadPanel] = useState(true);
+
+    // Transfer modal state
+    const [transferModal, setTransferModal] = useState(null); // { file } | null
+    const [transferTargetMachineId, setTransferTargetMachineId] = useState('');
+    const [transferDestPath, setTransferDestPath] = useState('');
+    const [transferring, setTransferring] = useState(false);
+    const [availableMachines, setAvailableMachines] = useState([]);
+    const [transferResult, setTransferResult] = useState(null); // { method, size, name }
 
     // Selection & Context Menu
     const [selectedItems, setSelectedItems] = useState(new Set());
@@ -309,11 +328,36 @@ const FileSystem = () => {
 
     const handleDownload = async (file) => {
         if (!file || file.isDirectory) return;
+        if (downloads.has(file.path)) return; // Already downloading
+
+        const controller = new AbortController();
+        setShowDownloadPanel(true);
+        setDownloads(prev => new Map(prev).set(file.path, {
+            name: file.name,
+            progress: 0,
+            loaded: 0,
+            status: 'downloading',
+            size: file.size || null,
+            cancel: () => controller.abort()
+        }));
+
         try {
             const response = await api.get('/files/download', {
                 params: { machineId, path: file.path },
-                responseType: 'blob'
+                responseType: 'blob',
+                signal: controller.signal,
+                onDownloadProgress: (evt) => {
+                    setDownloads(prev => {
+                        const m = new Map(prev);
+                        const entry = m.get(file.path);
+                        if (!entry) return prev;
+                        const progress = evt.total ? Math.round((evt.loaded / evt.total) * 100) : 0;
+                        m.set(file.path, { ...entry, progress, loaded: evt.loaded });
+                        return m;
+                    });
+                }
             });
+
             const objectUrl = window.URL.createObjectURL(response.data);
             const link = document.createElement('a');
             link.href = objectUrl;
@@ -322,8 +366,22 @@ const FileSystem = () => {
             link.click();
             document.body.removeChild(link);
             window.URL.revokeObjectURL(objectUrl);
+
+            setDownloads(prev => {
+                const m = new Map(prev);
+                const entry = m.get(file.path);
+                if (entry) m.set(file.path, { ...entry, status: 'done', progress: 100 });
+                return m;
+            });
+            setTimeout(() => {
+                setDownloads(prev => { const m = new Map(prev); m.delete(file.path); return m; });
+            }, 3000);
+
         } catch (err) {
-            // Blob responses need special handling to read the JSON error body
+            if (err.name === 'CanceledError' || err.code === 'ERR_CANCELED' || err.name === 'AbortError') {
+                setDownloads(prev => { const m = new Map(prev); m.delete(file.path); return m; });
+                return;
+            }
             let msg = t('downloadFailed');
             try {
                 const blob = err.response?.data;
@@ -333,6 +391,15 @@ const FileSystem = () => {
                     if (json.error) msg = json.error;
                 }
             } catch { /* ignore parse errors */ }
+            setDownloads(prev => {
+                const m = new Map(prev);
+                const entry = m.get(file.path);
+                if (entry) m.set(file.path, { ...entry, status: 'error', errorMsg: msg });
+                return m;
+            });
+            setTimeout(() => {
+                setDownloads(prev => { const m = new Map(prev); m.delete(file.path); return m; });
+            }, 5000);
             showNotification('error', msg);
         }
     };
@@ -368,6 +435,62 @@ const FileSystem = () => {
             file,
             count: newSelection.size
         });
+    };
+
+    const openTransferModal = async (file) => {
+        setContextMenu(null);
+        setTransferModal({ file });
+        setTransferTargetMachineId('');
+        setTransferDestPath(file.name); // default dest filename
+        // Load all connected machines (except current)
+        try {
+            const [agentsRes, hierarchyRes] = await Promise.all([
+                api.get('/agents').catch(() => ({ data: [] })),
+                api.get('/hierarchy').catch(() => ({ data: [] }))
+            ]);
+            const agentIds = (agentsRes.data || []).map(a => Number(a.id));
+            const nodes = [];
+            (hierarchyRes.data || []).forEach(floor => {
+                floor.rooms?.forEach(room => {
+                    room.machines?.forEach(m => {
+                        if (agentIds.includes(Number(m.id)) && String(m.id) !== String(machineId)) {
+                            nodes.push({ id: m.id, name: m.name, group: `${floor.name} — ${room.name}` });
+                        }
+                    });
+                });
+            });
+            // Include unassigned agents
+            (agentsRes.data || []).forEach(a => {
+                const exists = nodes.some(n => Number(n.id) === Number(a.id));
+                if (!exists && String(a.id) !== String(machineId)) {
+                    nodes.push({ id: a.id, name: a.machineName || `Agent-${a.id}`, group: 'Client Connect' });
+                }
+            });
+            setAvailableMachines(nodes);
+        } catch { setAvailableMachines([]); }
+    };
+
+    const handleTransfer = async (e) => {
+        e.preventDefault();
+        if (!transferTargetMachineId || !transferDestPath || !transferModal?.file) return;
+        setTransferring(true);
+        setTransferResult(null);
+        try {
+            const res = await api.post('/files/transfer', {
+                fromMachineId: machineId,
+                toMachineId: transferTargetMachineId,
+                sourcePath: transferModal.file.path,
+                destPath: transferDestPath
+            });
+            setTransferResult(res.data);
+            const methodLabel = { 'sftp→sftp': 'SSH→SSH', 'agent→sftp': 'Agent→SSH', 'sftp→agent': 'SSH→Agent', 'agent→agent': 'Agent→Agent' }[res.data.method] || res.data.method;
+            showNotification('success', `${t('transferComplete') || 'Transferred'} — ${methodLabel}`);
+            setTransferModal(null);
+        } catch (err) {
+            showNotification('error', err.response?.data?.error || (t('transferFailed') || 'Transfer failed'));
+        } finally {
+            setTransferring(false);
+        }
     };
 
     const handlePathSubmit = (e) => {
@@ -463,6 +586,45 @@ const FileSystem = () => {
         setActiveFilter('allFiles');
         setSizeFilter({ min: '', max: '' });
         setTypeFilter('all');
+    };
+
+    // Text file extensions that can be edited
+    const TEXT_EXTS = new Set(['txt','md','json','js','ts','jsx','tsx','css','html','htm','xml','yaml','yml','ini','conf','cfg','log','sh','bat','py','rb','php','java','c','cpp','h','sql','env','gitignore','toml','csv']);
+    const isEditableFile = (file) => !file.isDirectory && TEXT_EXTS.has(file.name.split('.').pop()?.toLowerCase());
+
+    const openEdit = async (file) => {
+        setContextMenu(null);
+        setEditModal({ file });
+        setEditLoading(true);
+        setEditContent('');
+        try {
+            const res = await api.get('/network/preview', { params: { machineId, path: file.path } });
+            if (res.data?.type === 'text') {
+                setEditContent(res.data.content);
+            } else {
+                showNotification('error', t('fileNotEditable') || 'File content could not be loaded');
+                setEditModal(null);
+            }
+        } catch {
+            showNotification('error', t('failedToLoadPreview') || 'Failed to load file');
+            setEditModal(null);
+        } finally {
+            setEditLoading(false);
+        }
+    };
+
+    const handleSaveEdit = async () => {
+        if (!editModal || editSaving) return;
+        setEditSaving(true);
+        try {
+            await api.put('/files/edit', { machineId, path: editModal.file.path, content: editContent });
+            showNotification('success', t('savedSuccessfully') || 'Saved');
+            setEditModal(null);
+        } catch (err) {
+            showNotification('error', err.response?.data?.error || (t('actionFailed') || 'Save failed'));
+        } finally {
+            setEditSaving(false);
+        }
     };
 
     // Preview
@@ -954,13 +1116,29 @@ const FileSystem = () => {
                                                                 onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                                                             ><Eye size={13} /></button>
                                                         )}
-                                                        {!file.isDirectory && (
-                                                            <button onClick={(e) => { e.stopPropagation(); handleDownload(file); }} title={t('download')}
-                                                                style={{ padding: 5, borderRadius: 5, background: 'transparent', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-                                                                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(16,185,129,0.1)'; e.currentTarget.style.color = '#34D399'; }}
-                                                                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
-                                                            ><Download size={13} /></button>
-                                                        )}
+                                                        {!file.isDirectory && (() => {
+                                                            const dlState = downloads.get(file.path);
+                                                            const isDownloading = dlState?.status === 'downloading';
+                                                            const isDone = dlState?.status === 'done';
+                                                            return (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); handleDownload(file); }}
+                                                                    title={isDownloading ? `${dlState.progress > 0 ? dlState.progress + '%' : (t('downloading') || 'Downloading...')}` : t('download')}
+                                                                    disabled={isDownloading}
+                                                                    style={{ padding: 5, borderRadius: 5, background: isDownloading ? 'rgba(59,130,246,0.1)' : isDone ? 'rgba(16,185,129,0.1)' : 'transparent', border: 'none', color: isDownloading ? 'var(--accent-blue)' : isDone ? '#34D399' : 'var(--text-muted)', cursor: isDownloading ? 'default' : 'pointer', position: 'relative' }}
+                                                                    onMouseEnter={e => { if (!isDownloading && !isDone) { e.currentTarget.style.background = 'rgba(16,185,129,0.1)'; e.currentTarget.style.color = '#34D399'; } }}
+                                                                    onMouseLeave={e => { if (!isDownloading && !isDone) { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; } }}
+                                                                >
+                                                                    {isDownloading ? (
+                                                                        <div style={{ width: 13, height: 13, borderRadius: '50%', border: '2px solid rgba(59,130,246,0.3)', borderTopColor: 'var(--accent-blue)', animation: 'spin 0.8s linear infinite' }} />
+                                                                    ) : isDone ? (
+                                                                        <CheckCircle size={13} />
+                                                                    ) : (
+                                                                        <Download size={13} />
+                                                                    )}
+                                                                </button>
+                                                            );
+                                                        })()}
                                                     </div>
                                                 </div>
                                             </div>
@@ -1014,6 +1192,63 @@ const FileSystem = () => {
                     </div>
                 </div>
 
+                {/* ── File Editor Modal ── */}
+                {editModal && (
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 55, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.72)', backdropFilter: 'blur(6px)' }}
+                        onClick={() => !editSaving && setEditModal(null)}>
+                        <div className="animate-fadeUp" style={{ background: 'var(--bg-elevated)', border: '1px solid rgba(251,191,36,0.25)', borderRadius: 16, width: '100%', maxWidth: 800, maxHeight: '90vh', display: 'flex', flexDirection: 'column', boxShadow: 'var(--shadow-elevated)' }}
+                            onClick={e => e.stopPropagation()}>
+                            {/* Header */}
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderBottom: '1px solid var(--border-subtle)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                                    <Pencil size={14} color="#FBBF24" />
+                                    <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', fontFamily: "'Fira Code', monospace" }}>{editModal.file.name}</span>
+                                    <span style={{ fontSize: 10, color: 'var(--text-muted)', background: 'rgba(251,191,36,0.08)', border: '1px solid rgba(251,191,36,0.2)', borderRadius: 4, padding: '2px 6px' }}>{t('editFile') || 'EDIT'}</span>
+                                </div>
+                                <button onClick={() => setEditModal(null)} disabled={editSaving}
+                                    style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--bg-hover)', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                    <X size={14} />
+                                </button>
+                            </div>
+                            {/* Textarea */}
+                            <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', padding: '12px 16px' }}>
+                                {editLoading ? (
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 200, gap: 10, color: 'var(--text-muted)' }}>
+                                        <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid #FBBF24', borderTopColor: 'transparent', animation: 'spin 0.8s linear infinite' }} />
+                                        {t('loadingPreview') || 'Loading...'}
+                                    </div>
+                                ) : (
+                                    <textarea
+                                        value={editContent}
+                                        onChange={e => setEditContent(e.target.value)}
+                                        spellCheck={false}
+                                        style={{ flex: 1, minHeight: 360, maxHeight: '62vh', width: '100%', fontFamily: "'Fira Code', monospace", fontSize: 12, lineHeight: 1.65, color: '#A8D8A8', background: 'var(--bg-base)', border: '1px solid var(--border-subtle)', borderRadius: 10, padding: 14, resize: 'vertical', outline: 'none', boxSizing: 'border-box' }}
+                                        onFocus={e => e.target.style.borderColor = 'rgba(251,191,36,0.4)'}
+                                        onBlur={e => e.target.style.borderColor = 'var(--border-subtle)'}
+                                    />
+                                )}
+                            </div>
+                            {/* Footer */}
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', borderTop: '1px solid var(--border-subtle)' }}>
+                                <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: "'Fira Code', monospace" }}>
+                                    {editContent.split('\n').length} {t('lines') || 'lines'} · {editContent.length} {t('chars') || 'chars'}
+                                </span>
+                                <div style={{ display: 'flex', gap: 8 }}>
+                                    <button onClick={() => setEditModal(null)} disabled={editSaving}
+                                        style={{ padding: '7px 16px', background: 'var(--bg-hover)', border: '1px solid var(--border-default)', borderRadius: 8, fontSize: 12, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+                                        {t('cancel') || 'Cancel'}
+                                    </button>
+                                    <button onClick={handleSaveEdit} disabled={editSaving || editLoading}
+                                        style={{ padding: '7px 16px', background: 'rgba(251,191,36,0.12)', border: '1px solid rgba(251,191,36,0.35)', borderRadius: 8, fontSize: 12, fontWeight: 600, color: '#FBBF24', cursor: editSaving ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
+                                        {editSaving ? <div style={{ width: 12, height: 12, border: '2px solid #FBBF24', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> : <CheckCircle size={12} />}
+                                        {editSaving ? '...' : (t('save') || 'Save')}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
                 {/* ── Preview Modal ── */}
                 {previewFile && (
                     <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(6px)' }}
@@ -1065,8 +1300,10 @@ const FileSystem = () => {
 
                         {[
                             { show: !contextMenu.file.isDirectory, label: t('openPreview') || 'Open Preview', icon: Eye, action: () => { openPreview(contextMenu.file); setContextMenu(null); }, color: 'var(--accent-blue)' },
+                            { show: isEditableFile(contextMenu.file), label: t('editFile') || 'Edit File', icon: Pencil, action: () => openEdit(contextMenu.file), color: '#FBBF24' },
                             { show: true, label: t('rename') || 'Rename', icon: Terminal, action: () => handleAction('rename'), color: 'var(--text-primary)' },
                             { show: !contextMenu.file.isDirectory, label: t('download') || 'Download', icon: Download, action: () => { handleDownload(contextMenu.file); setContextMenu(null); }, color: '#34D399' },
+                            { show: !contextMenu.file.isDirectory, label: t('sendToMachine') || 'Send to Machine', icon: Send, action: () => openTransferModal(contextMenu.file), color: '#A78BFA' },
                         ].filter(i => i.show).map(({ label, icon: Icon, action, color }) => (
                             <button key={label} onClick={action}
                                 style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'transparent', border: 'none', cursor: 'pointer', fontSize: 13, color: 'var(--text-secondary)', borderRadius: 7, textAlign: 'left' }}
@@ -1084,10 +1321,174 @@ const FileSystem = () => {
                     </div>
                 )}
 
+                {/* ── Transfer Modal ── */}
+                {transferModal && (
+                    <div style={{ position: 'fixed', inset: 0, zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)' }}
+                        onClick={() => !transferring && setTransferModal(null)}>
+                        <div className="animate-fadeUp" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 14, width: '100%', maxWidth: 420, padding: 24, boxShadow: 'var(--shadow-elevated)' }}
+                            onClick={e => e.stopPropagation()}>
+                            <h3 style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 15, fontWeight: 600, color: 'var(--text-primary)', marginBottom: 4, fontFamily: "'Fira Code', monospace" }}>
+                                <ArrowRightLeft size={16} color="#A78BFA" />
+                                {t('sendToMachine') || 'Send to Machine'}
+                            </h3>
+                            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 10 }}>
+                                {t('transferViaServer') || 'Server auto-selects the best relay path for your LAN.'}
+                            </p>
+                            {/* Relay method priority badges */}
+                            <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: 16 }}>
+                                {[
+                                    { label: 'SSH→SSH', color: '#10B981', title: 'Direct SFTP (fastest)' },
+                                    { label: 'Agent→SSH', color: '#3B82F6', title: 'Agent source, SFTP dest' },
+                                    { label: 'SSH→Agent', color: '#8B5CF6', title: 'SFTP source, Agent dest' },
+                                    { label: 'Agent→Agent', color: '#9CA3AF', title: 'WebSocket relay (fallback)' }
+                                ].map((m, i) => (
+                                    <div key={i} title={m.title} style={{
+                                        display: 'flex', alignItems: 'center', gap: 3, fontSize: 10,
+                                        padding: '2px 8px', borderRadius: 20,
+                                        background: `${m.color}18`, border: `1px solid ${m.color}50`, color: m.color,
+                                        fontFamily: "'Fira Code', monospace", fontWeight: 600, cursor: 'default',
+                                        opacity: i === 0 ? 1 : 0.65
+                                    }}>
+                                        {i === 0 && <span style={{ fontSize: 8, marginRight: 2 }}>★</span>}
+                                        {m.label}
+                                    </div>
+                                ))}
+                            </div>
+
+                            {/* Source */}
+                            <div style={{ padding: '10px 12px', background: 'var(--bg-hover)', borderRadius: 8, marginBottom: 16, fontSize: 12 }}>
+                                <div style={{ color: 'var(--text-muted)', marginBottom: 3, textTransform: 'uppercase', fontSize: 10, fontWeight: 600, letterSpacing: '0.06em' }}>{t('sourceFile') || 'Source'}</div>
+                                <div style={{ color: 'var(--text-primary)', fontFamily: "'Fira Code', monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{transferModal.file.name}</div>
+                                <div style={{ color: 'var(--text-muted)', marginTop: 2 }}>{formatFileSize(transferModal.file.size)} &mdash; {t('machine') || 'Machine'} {machineId}</div>
+                            </div>
+
+                            <form onSubmit={handleTransfer}>
+                                {/* Destination machine */}
+                                <div style={{ marginBottom: 14 }}>
+                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                                        {t('destinationMachine') || 'Destination Machine'}
+                                    </label>
+                                    {availableMachines.length === 0 ? (
+                                        <div style={{ fontSize: 12, color: 'var(--danger)', padding: '8px 10px', background: 'rgba(239,68,68,0.08)', borderRadius: 7, border: '1px solid rgba(239,68,68,0.2)' }}>
+                                            {t('noOtherMachinesOnline') || 'No other machines are online.'}
+                                        </div>
+                                    ) : (
+                                        <select value={transferTargetMachineId} onChange={e => setTransferTargetMachineId(e.target.value)} required
+                                            style={{ width: '100%', padding: '9px 10px', background: 'var(--bg-hover)', border: '1px solid var(--border-default)', borderRadius: 8, fontSize: 13, color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box' }}
+                                            onFocus={e => { e.target.style.borderColor = 'var(--accent-blue)'; e.target.style.boxShadow = 'var(--accent-focus-ring)'; }}
+                                            onBlur={e => { e.target.style.borderColor = 'var(--border-default)'; e.target.style.boxShadow = 'none'; }}>
+                                            <option value="">{t('selectMachine') || '-- Select machine --'}</option>
+                                            {availableMachines.map(m => (
+                                                <option key={m.id} value={m.id}>{m.name} ({m.group})</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                </div>
+
+                                {/* Destination path */}
+                                <div style={{ marginBottom: 20 }}>
+                                    <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 6 }}>
+                                        {t('destinationPath') || 'Destination Path (absolute on target)'}
+                                    </label>
+                                    <input type="text" value={transferDestPath} onChange={e => setTransferDestPath(e.target.value)} required
+                                        placeholder="/home/user/data/file.zip"
+                                        style={{ width: '100%', padding: '9px 12px', background: 'var(--bg-hover)', border: '1px solid var(--border-default)', borderRadius: 8, fontSize: 13, color: 'var(--text-primary)', outline: 'none', boxSizing: 'border-box', fontFamily: "'Fira Code', monospace" }}
+                                        onFocus={e => { e.target.style.borderColor = 'var(--accent-blue)'; e.target.style.boxShadow = 'var(--accent-focus-ring)'; }}
+                                        onBlur={e => { e.target.style.borderColor = 'var(--border-default)'; e.target.style.boxShadow = 'none'; }}
+                                    />
+                                </div>
+
+                                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+                                    <button type="button" onClick={() => setTransferModal(null)} disabled={transferring}
+                                        style={{ padding: '8px 16px', background: 'var(--bg-hover)', border: '1px solid var(--border-default)', borderRadius: 8, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}
+                                        onMouseEnter={e => e.currentTarget.style.borderColor = 'var(--border-strong)'}
+                                        onMouseLeave={e => e.currentTarget.style.borderColor = 'var(--border-default)'}
+                                    >{t('cancel') || 'Cancel'}</button>
+                                    <button type="submit" disabled={transferring || !transferTargetMachineId || !transferDestPath}
+                                        style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 18px', background: '#7C3AED', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600, color: 'white', cursor: transferring ? 'wait' : 'pointer', opacity: (!transferTargetMachineId || !transferDestPath) ? 0.5 : 1 }}>
+                                        {transferring ? <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> : <Send size={14} />}
+                                        {transferring ? (t('transferring') || 'Transferring...') : (t('sendToMachine') || 'Send')}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )}
+
+                {/* ── Download Manager Panel ── */}
+                {downloads.size > 0 && showDownloadPanel && (
+                    <div className="animate-fadeUp" style={{
+                        position: 'fixed', bottom: 24, right: 24, zIndex: 55,
+                        background: 'var(--bg-elevated)', border: '1px solid var(--border-default)',
+                        borderRadius: 12, boxShadow: 'var(--shadow-elevated)', minWidth: 300, maxWidth: 360,
+                        overflow: 'hidden'
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', borderBottom: '1px solid var(--border-subtle)', background: 'rgba(255,255,255,0.02)' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, fontWeight: 600, color: 'var(--text-secondary)' }}>
+                                <Download size={13} color="var(--accent-blue)" />
+                                {t('activeDownloads') || 'Downloads'}
+                                <span style={{ fontSize: 10, color: 'var(--text-muted)', background: 'var(--bg-hover)', borderRadius: 10, padding: '1px 6px', fontFamily: "'Fira Code', monospace" }}>{downloads.size}</span>
+                            </div>
+                            <button onClick={() => setShowDownloadPanel(false)}
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 2, borderRadius: 4 }}
+                                onMouseEnter={e => { e.currentTarget.style.color = 'var(--text-secondary)'; e.currentTarget.style.background = 'var(--bg-hover)'; }}
+                                onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
+                                title={t('close') || 'Close'}
+                            ><X size={13} /></button>
+                        </div>
+                        <div style={{ maxHeight: 260, overflowY: 'auto' }}>
+                            {[...downloads.entries()].map(([filePath, dl]) => (
+                                <div key={filePath} style={{ padding: '10px 14px', borderBottom: '1px solid var(--border-subtle)' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                                        <span style={{ fontSize: 12, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 210, fontFamily: "'Fira Code', monospace" }} title={dl.name}>{dl.name}</span>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                                            {dl.status === 'downloading' && (
+                                                <span style={{ fontSize: 10, color: 'var(--accent-blue)', fontFamily: "'Fira Code', monospace" }}>
+                                                    {dl.progress > 0 ? `${dl.progress}%` : formatFileSize(dl.loaded)}
+                                                </span>
+                                            )}
+                                            {dl.status === 'done' && <CheckCircle size={14} color="#34D399" />}
+                                            {dl.status === 'error' && <XCircle size={14} color="#F87171" />}
+                                            {dl.status === 'downloading' && (
+                                                <button onClick={dl.cancel}
+                                                    title={t('cancelDownload') || 'Cancel download'}
+                                                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', display: 'flex', padding: 2, borderRadius: 4 }}
+                                                    onMouseEnter={e => { e.currentTarget.style.color = '#F87171'; e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; }}
+                                                    onMouseLeave={e => { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.background = 'none'; }}
+                                                ><X size={12} /></button>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <div style={{ height: 4, background: 'var(--bg-hover)', borderRadius: 2, overflow: 'hidden', position: 'relative' }}>
+                                        <div style={{
+                                            height: '100%', borderRadius: 2,
+                                            background: dl.status === 'done' ? '#34D399' : dl.status === 'error' ? '#F87171' : 'var(--accent-blue)',
+                                            width: dl.status === 'downloading' && dl.progress === 0 ? '100%' : `${dl.progress}%`,
+                                            transition: 'width 0.25s ease',
+                                            animation: dl.status === 'downloading' && dl.progress === 0 ? 'shimmer 1.4s ease-in-out infinite' : 'none'
+                                        }} />
+                                    </div>
+                                    {dl.status === 'downloading' && dl.size && (
+                                        <div style={{ fontSize: 10, color: 'var(--text-muted)', marginTop: 4, fontFamily: "'Fira Code', monospace" }}>
+                                            {formatFileSize(dl.loaded)} / {formatFileSize(dl.size)}
+                                        </div>
+                                    )}
+                                    {dl.status === 'error' && (
+                                        <div style={{ fontSize: 10, color: '#F87171', marginTop: 4 }}>{dl.errorMsg || t('downloadFailed')}</div>
+                                    )}
+                                    {dl.status === 'done' && (
+                                        <div style={{ fontSize: 10, color: '#34D399', marginTop: 4 }}>{t('downloadComplete') || 'Complete'}</div>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
                 {/* ── Notification Toast ── */}
                 {notification && (
                     <div className="animate-fadeUp" style={{
-                        position: 'fixed', bottom: 24, right: 24, zIndex: 60,
+                        position: 'fixed', bottom: 24, left: 24, zIndex: 60,
                         display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px',
                         borderRadius: 10, boxShadow: 'var(--shadow-elevated)',
                         background: notification.type === 'error' ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
@@ -1150,6 +1551,7 @@ const FileSystem = () => {
 
                 <style>{`
                 @keyframes spin { to { transform: rotate(360deg); } }
+                @keyframes shimmer { 0%, 100% { opacity: 0.35; } 50% { opacity: 0.7; } }
                 .file-row:hover .file-actions { opacity: 1 !important; }
                 `}</style>
             </div>

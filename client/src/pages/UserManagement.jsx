@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Shield, Plus, Edit2, Trash2, X, Save, UserPlus, AlertCircle, CheckCircle } from 'lucide-react';
+import { Users, Shield, Plus, Edit2, Trash2, X, Save, UserPlus, AlertCircle, CheckCircle, KeyRound } from 'lucide-react';
 import api from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
 
@@ -49,6 +49,9 @@ const UserManagement = () => {
     const [roleModal, setRoleModal] = useState({ open: false, mode: 'create', data: null });
     const [roleForm, setRoleForm] = useState({ name: '', permissions: [] });
     const [deleteConfirm, setDeleteConfirm] = useState(null);
+    const [resetModal, setResetModal] = useState(null); // { user }
+    const [resetPassword, setResetPassword] = useState('');
+    const [resetting, setResetting] = useState(false);
 
     const showNotification = (type, message) => {
         setNotification({ type, message });
@@ -108,6 +111,23 @@ const UserManagement = () => {
     const handleDeleteRole = async (id) => {
         try { await api.delete(`/users/roles/${id}`); showNotification('success', t('roleDeleted')); setDeleteConfirm(null); fetchData(); }
         catch (err) { showNotification('error', err.response?.data?.error || t('failedToDelete')); }
+    };
+
+    const handleResetPassword = async (e) => {
+        e.preventDefault();
+        if (!resetModal || !resetPassword) return;
+        if (resetPassword.length < 6) { showNotification('error', t('passwordTooShort')); return; }
+        setResetting(true);
+        try {
+            await api.post(`/users/${resetModal.user.id}/reset-password`, { newPassword: resetPassword });
+            showNotification('success', t('passwordResetSuccess') || 'Password reset successfully');
+            setResetModal(null);
+            setResetPassword('');
+        } catch (err) {
+            showNotification('error', err.response?.data?.error || 'Failed to reset password');
+        } finally {
+            setResetting(false);
+        }
     };
 
     if (loading) return (
@@ -209,6 +229,12 @@ const UserManagement = () => {
                                                         onMouseEnter={e => { e.currentTarget.style.background = 'var(--accent-bg-light)'; e.currentTarget.style.color = 'var(--accent-blue)'; }}
                                                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
                                                     ><Edit2 size={13} /></button>
+                                                    <button onClick={() => { setResetModal({ user }); setResetPassword(''); }}
+                                                        title={t('resetPassword') || 'Reset Password'}
+                                                        style={iconBtn()}
+                                                        onMouseEnter={e => { e.currentTarget.style.background = 'rgba(245,158,11,0.1)'; e.currentTarget.style.color = '#FBBF24'; }}
+                                                        onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
+                                                    ><KeyRound size={13} /></button>
                                                     <button onClick={() => setDeleteConfirm({ type: 'user', id: user.id, name: user.username })} style={iconBtn()}
                                                         onMouseEnter={e => { e.currentTarget.style.background = 'rgba(239,68,68,0.1)'; e.currentTarget.style.color = '#F87171'; }}
                                                         onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = 'var(--text-muted)'; }}
@@ -401,6 +427,44 @@ const UserManagement = () => {
                             <button onClick={() => deleteConfirm.type === 'user' ? handleDeleteUser(deleteConfirm.id) : handleDeleteRole(deleteConfirm.id)}
                                 style={{ flex: 1, ...btnDanger, borderRadius: 9, padding: '9px' }}>{t('delete')}</button>
                         </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ── Reset Password Modal ── */}
+            {resetModal && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(5px)' }}
+                    onClick={() => !resetting && setResetModal(null)}>
+                    <div className="animate-fadeUp" style={{ background: 'var(--bg-elevated)', border: '1px solid rgba(245,158,11,0.3)', borderRadius: 14, width: '100%', maxWidth: 380, padding: 24, boxShadow: 'var(--shadow-elevated)' }}
+                        onClick={e => e.stopPropagation()}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                            <h2 style={{ fontSize: 15, fontWeight: 700, color: '#FBBF24', fontFamily: "'Fira Code', monospace", display: 'flex', alignItems: 'center', gap: 8, margin: 0 }}>
+                                <KeyRound size={15} color="#FBBF24" />
+                                {t('resetPassword') || 'Reset Password'}
+                            </h2>
+                            <button onClick={() => setResetModal(null)} style={{ width: 28, height: 28, borderRadius: 7, background: 'var(--bg-hover)', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={14} /></button>
+                        </div>
+                        <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 16 }}>
+                            {t('resetPasswordFor') || 'Set new password for'} <strong style={{ color: 'white', fontFamily: "'Fira Code', monospace" }}>{resetModal.user.username}</strong>
+                        </p>
+                        <form onSubmit={handleResetPassword} style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                            <div>
+                                <Label>{t('newPassword') || 'New Password'}</Label>
+                                <input type="password" value={resetPassword} required autoFocus
+                                    placeholder="Min. 6 characters"
+                                    onChange={e => setResetPassword(e.target.value)}
+                                    style={inputSt} onFocus={iFocus} onBlur={iBlur} />
+                            </div>
+                            <div style={{ display: 'flex', gap: 8 }}>
+                                <button type="button" onClick={() => setResetModal(null)} disabled={resetting}
+                                    style={{ flex: 1, padding: '9px', background: 'var(--bg-hover)', border: '1px solid var(--border-default)', borderRadius: 9, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}>{t('cancel')}</button>
+                                <button type="submit" disabled={resetting || !resetPassword}
+                                    style={{ flex: 1, padding: '9px', background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.4)', borderRadius: 9, fontSize: 13, fontWeight: 600, color: '#FBBF24', cursor: resetting ? 'wait' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, opacity: !resetPassword ? 0.5 : 1 }}>
+                                    {resetting ? <div style={{ width: 13, height: 13, border: '2px solid #FBBF24', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.7s linear infinite' }} /> : <KeyRound size={13} />}
+                                    {resetting ? '...' : (t('resetPassword') || 'Reset')}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}

@@ -203,6 +203,65 @@ exports.changeUserPassword = async (config, username, newPassword) => {
 };
 
 /**
+ * Upload a readable stream to a remote machine via SFTP
+ * Ideal for LAN-to-LAN server-mediated relay: pipe a download stream directly into an upload.
+ *
+ * @param {object} config       - { host, port, username, password }
+ * @param {string} remotePath   - Absolute destination path on the remote machine
+ * @param {import('stream').Readable} sourceStream - Readable stream to upload
+ * @param {number} [fileSize]   - Optional: total bytes (for progress)
+ * @returns {Promise<{ path: string, size: number }>}
+ */
+exports.uploadFile = (config, remotePath, sourceStream, fileSize = 0) => {
+    return new Promise((resolve, reject) => {
+        const conn = new Client();
+        const path = require('path');
+
+        conn.on('ready', () => {
+            conn.sftp((err, sftp) => {
+                if (err) {
+                    conn.end();
+                    return reject(err);
+                }
+
+                // Ensure parent directory exists
+                const dir = path.posix.dirname(remotePath);
+                sftp.mkdir(dir, { mode: 0o755 }, () => {
+                    // Ignore mkdir error (dir may already exist)
+                    const writeStream = sftp.createWriteStream(remotePath);
+
+                    let written = 0;
+                    sourceStream.on('data', (chunk) => { written += chunk.length; });
+
+                    writeStream.on('close', () => {
+                        conn.end();
+                        resolve({ path: remotePath, size: written || fileSize });
+                    });
+
+                    writeStream.on('error', (err) => {
+                        conn.end();
+                        reject(err);
+                    });
+
+                    sourceStream.on('error', (err) => {
+                        conn.end();
+                        reject(err);
+                    });
+
+                    sourceStream.pipe(writeStream);
+                });
+            });
+        }).on('error', reject).connect({
+            host: config.host,
+            port: config.port || 22,
+            username: config.username,
+            password: config.password,
+            tryKeyboard: true
+        });
+    });
+};
+
+/**
  * Download (stream) a file via SFTP
  * @param {object} config - { host, port, username, password }
  * @param {string} remotePath - Absolute path on the remote machine

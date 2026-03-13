@@ -1,7 +1,9 @@
 const WebSocket = require('ws');
+const crypto = require('crypto');
 const prisma = require('./prisma');
 const notificationHub = require('./notificationHub');
 const { logActivity } = require('./activityService');
+const { encryptSecret } = require('./credentialCrypto');
 
 /**
  * AgentManager - Quản lý kết nối WebSocket từ các agent remote
@@ -21,6 +23,17 @@ class AgentManager {
         // Map: requestId -> { resolve, reject, timeout }
         this.pendingRequests = new Map();
         this.requestCounter = 0;
+    }
+
+    _getAgentSharedSecret() {
+        return process.env.WS_AGENT_SHARED_SECRET || '';
+    }
+
+    _signRequestEnvelope({ requestId, action, params, ts }) {
+        const secret = this._getAgentSharedSecret();
+        if (!secret) return null;
+        const payload = `${requestId}|${action}|${ts}|${JSON.stringify(params || {})}`;
+        return crypto.createHmac('sha256', secret).update(payload).digest('hex');
     }
 
     /**
@@ -134,7 +147,11 @@ class AgentManager {
             if (sshInfo) {
                 if (sshInfo.available && sshInfo.username && sshInfo.password) {
                     updateData.username = sshInfo.username;
-                    updateData.password = sshInfo.password;
+                    try {
+                        updateData.password = encryptSecret(sshInfo.password);
+                    } catch (e) {
+                        console.warn(`⚠️ Could not encrypt SSH password for machine ${machine.name}: ${e.message}`);
+                    }
                     console.log(`  🔐 SSH credentials updated for machine ${machine.name}`);
                 }
                 if (sshInfo.port && sshInfo.port !== 22) {
@@ -238,9 +255,10 @@ class AgentManager {
         const pending = this.pendingRequests.get(requestId);
         if (!pending || !pending.onChunk) return;
 
-        if (data) {
-            pending.onChunk(Buffer.from(data, 'base64'), !!last);
-        }
+        // Always invoke onChunk — including the final empty sentinel (data='', last=true).
+        // The original `if (data)` guard caused onChunk to be skipped on the last chunk,
+        // leaving streamDownload's PassThrough unclosed and relayFile's Promise unsettled.
+        pending.onChunk(Buffer.from(data || '', 'base64'), !!last);
 
         if (last) {
             clearTimeout(pending.timeout);
@@ -287,6 +305,98 @@ class AgentManager {
                 requestId,
                 action: 'download_file_stream',
                 params: { path: filePath, isAdmin }
+            });
+        });
+    }
+
+    /**
+     * Relay file từ fromMachineId → toMachineId qua server làm trung gian
+     * Server nhận stream từng chunk từ source agent, gửi từng chunk đến dest agent
+     *
+     * @param {number} fromMachineId  - ID máy nguồn
+     * @param {number} toMachineId    - ID máy đích
+     * @param {string} sourcePath     - Đường dẫn file trên máy nguồn
+     * @param {string} destPath       - Đường dẫn lưu trên máy đích
+     * @param {boolean} isAdmin
+     * @param {function} onProgress   - Callback(transferred, total) — tuỳ chọn
+     * @returns {Promise<{ size: number, name: string }>}
+     */
+    relayFile(fromMachineId, toMachineId, sourcePath, destPath, isAdmin = false, onProgress = null) {
+        return new Promise((resolve, reject) => {
+            const srcAgent = this.agents.get(fromMachineId);
+            const dstAgent = this.agents.get(toMachineId);
+
+            if (!srcAgent || srcAgent.ws.readyState !== WebSocket.OPEN) {
+                return reject(new Error(`Source agent (machine ${fromMachineId}) is not connected`));
+            }
+            if (!dstAgent || dstAgent.ws.readyState !== WebSocket.OPEN) {
+                return reject(new Error(`Destination agent (machine ${toMachineId}) is not connected`));
+            }
+
+            const requestId = `relay_${++this.requestCounter}_${Date.now()}`;
+            let chunkIndex = 0;
+            let totalSize = 0;
+            let transferred = 0;
+            let fileName = require('path').basename(sourcePath);
+            const pendingWrites = []; // Queue chunk-write promises (serial)
+            let streamEnded = false;
+
+            // Helper: gửi 1 chunk đến dest agent và chờ ack
+            const sendChunkToDest = (base64Data, complete) => {
+                return this.sendRequest(toMachineId, 'receive_file_stream', {
+                    path: destPath,
+                    chunkIndex: chunkIndex++,
+                    append: chunkIndex > 1,
+                    data: base64Data,
+                    complete,
+                    isAdmin
+                }, 60000); // 60s per chunk
+            };
+
+            const timeout = setTimeout(() => {
+                this.pendingRequests.delete(requestId);
+                reject(new Error('Relay timed out'));
+            }, 30 * 60 * 1000); // 30 min max
+
+            this.pendingRequests.set(requestId, {
+                resolve,
+                reject,
+                timeout,
+                onStreamStart: (meta) => {
+                    totalSize = meta.size || 0;
+                    fileName = meta.name || fileName;
+                    // Reset chunkIndex & write state
+                    chunkIndex = 0;
+                },
+                onChunk: async (buffer, last) => {
+                    try {
+                        transferred += buffer.length;
+                        const base64 = buffer.toString('base64');
+                        await sendChunkToDest(base64, last);
+
+                        if (onProgress && totalSize > 0) {
+                            onProgress(transferred, totalSize);
+                        }
+
+                        if (last) {
+                            clearTimeout(timeout);
+                            this.pendingRequests.delete(requestId);
+                            resolve({ size: transferred, name: fileName });
+                        }
+                    } catch (writeErr) {
+                        clearTimeout(timeout);
+                        this.pendingRequests.delete(requestId);
+                        reject(writeErr);
+                    }
+                }
+            });
+
+            // Khởi động stream từ source agent
+            this._sendToAgent(srcAgent.ws, {
+                type: 'request',
+                requestId,
+                action: 'download_file_stream',
+                params: { path: sourcePath, isAdmin }
             });
         });
     }
@@ -407,6 +517,18 @@ class AgentManager {
      */
     _sendToAgent(ws, data) {
         if (ws.readyState === WebSocket.OPEN) {
+            if (data?.type === 'request') {
+                const ts = Date.now();
+                const sig = this._signRequestEnvelope({
+                    requestId: data.requestId,
+                    action: data.action,
+                    params: data.params,
+                    ts
+                });
+                if (sig) {
+                    data.security = { ts, sig };
+                }
+            }
             ws.send(JSON.stringify(data));
         }
     }

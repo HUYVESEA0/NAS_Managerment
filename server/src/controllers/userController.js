@@ -187,6 +187,31 @@ exports.changePassword = async (req, res) => {
     }
 };
 
+/**
+ * Admin reset mật khẩu của user bất kỳ (không cần nhập mật khẩu cũ)
+ */
+exports.resetUserPassword = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { newPassword } = req.body;
+
+        if (!newPassword || newPassword.length < 6) {
+            return res.status(400).json({ error: 'New password must be at least 6 characters.' });
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: parseInt(id) } });
+        if (!user) return res.status(404).json({ error: 'User not found.' });
+
+        const hashed = await bcrypt.hash(newPassword, 10);
+        await prisma.user.update({ where: { id: parseInt(id) }, data: { password: hashed } });
+
+        logActivity({ category: 'user', action: 'reset_password', level: 'warn', message: `Admin reset password for user "${user.username}" (ID ${id})`, userId: req.user?.id, ipAddress: req.ip, meta: { targetUserId: id, targetUsername: user.username } });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+};
+
 // ==================== ROLE CRUD ====================
 
 /**

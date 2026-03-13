@@ -13,6 +13,9 @@ router.get('/me', userController.getMe);
 // Đổi mật khẩu
 router.put('/change-password', userController.changePassword);
 
+// Admin reset password của user bất kỳ
+router.post('/:id/reset-password', adminOnly, userController.resetUserPassword);
+
 // ========== Admin-only Routes ==========
 // Quản lý users
 router.get('/', adminOnly, userController.getAllUsers);

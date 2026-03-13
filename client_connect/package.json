@@ -1,7 +1,7 @@
 {
-    "name": "nas-client-connect",
+    "name": "nashub-client-connect",
     "version": "1.0.0",
-    "description": "NAS Manager Client Connect - Runs on remote machines to share directories",
+    "description": "NASHub Client Connect - Runs on remote machines to share directories",
     "main": "client_connect.js",
     "scripts": {
         "start": "node client_connect.js"

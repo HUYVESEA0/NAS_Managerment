@@ -1,5 +1,6 @@
 const prisma = require('../utils/prisma');
 const sshService = require('../utils/sshService');
+const { decryptSecret } = require('../utils/credentialCrypto');
 
 /**
  * Helper: lấy SSH config từ machine
@@ -13,7 +14,8 @@ async function getMachineSSHConfig(machineId) {
         throw { status: 404, message: 'Machine not found' };
     }
 
-    if (!machine.ipAddress || !machine.username || !machine.password) {
+    const machinePassword = machine.password ? decryptSecret(machine.password) : null;
+    if (!machine.ipAddress || !machine.username || !machinePassword) {
         throw { status: 400, message: 'Machine does not have SSH credentials configured' };
     }
 
@@ -23,7 +25,7 @@ async function getMachineSSHConfig(machineId) {
             host: machine.ipAddress,
             port: machine.port || 22,
             username: machine.username,
-            password: machine.password
+            password: machinePassword
         }
     };
 }

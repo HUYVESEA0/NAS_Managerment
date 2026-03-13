@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const systemController = require('../controllers/systemController');
-const { authenticate } = require('../middleware/auth');
+const { authenticate, adminOnly } = require('../middleware/auth');
 
 // Lấy toàn bộ thông tin tĩnh của hệ thống (OS, CPU info, MEM, Disk, Network interfaces)
 router.get('/info', authenticate, systemController.getSystemInfo);
@@ -11,5 +11,8 @@ router.get('/stats', authenticate, systemController.getSystemStats);
 
 // Lấy danh sách tiến trình đang chạy (tương tự Task Manager)
 router.get('/processes', authenticate, systemController.getProcesses);
+
+// Kill process (Admin only)
+router.delete('/processes/:pid', adminOnly, systemController.killProcess);
 
 module.exports = router;
