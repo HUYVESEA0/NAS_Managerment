@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Server, Folder, Settings, Users, LogOut, Shield, ChevronDown, Globe, Wifi, Activity, Terminal, User } from 'lucide-react';
+import { LayoutDashboard, Server, Folder, Settings, Users, LogOut, Shield, ChevronDown, Globe, Wifi, Activity, Terminal, User, Table } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage, LANGUAGES } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -78,6 +78,7 @@ const DashboardLayout = () => {
         { path: '/', labelKey: 'overview', icon: LayoutDashboard, show: true },
         { path: '/system', labelKey: 'systemStatus', icon: Activity, show: hasPermission('MANAGE_HIERARCHY') },
         { path: '/files', labelKey: 'fileExplorer', icon: Folder, show: hasPermission('READ_FILES', 'BROWSE_FILES') },
+        { path: '/spreadsheet', labelKey: 'spreadsheetHub', icon: Table, show: hasPermission('READ_FILES', 'BROWSE_FILES') },
         { path: '/network', labelKey: 'network', icon: Globe, show: hasPermission('MANAGE_HIERARCHY') },
         { path: '/topology', labelKey: 'topology', icon: Wifi, show: hasPermission('MANAGE_HIERARCHY') },
         { path: '/admin', labelKey: 'infrastructure', icon: Settings, show: hasPermission('MANAGE_HIERARCHY', 'WRITE_HIERARCHY') },

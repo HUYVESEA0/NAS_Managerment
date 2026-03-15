@@ -19,6 +19,7 @@ const NetworkTopology = React.lazy(() => import('./pages/NetworkTopology'))
 const SystemStatus = React.lazy(() => import('./pages/SystemStatus'))
 const ActivityLog = React.lazy(() => import('./pages/ActivityLog'))
 const Profile = React.lazy(() => import('./pages/Profile'))
+const Spreadsheet = React.lazy(() => import('./pages/Spreadsheet'))
 
 const PageLoader = () => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-base)' }}>
@@ -104,6 +105,14 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                     }
                   />
                   <Route path="profile" element={<Profile />} />
+                  <Route
+                    path="spreadsheet"
+                    element={
+                      <ProtectedRoute requirePermissions={['READ_FILES', 'BROWSE_FILES']}>
+                        <Spreadsheet />
+                      </ProtectedRoute>
+                    }
+                  />
                 </Route>
               </Routes>
             </Suspense>

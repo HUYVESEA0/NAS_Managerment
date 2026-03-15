@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Server, Cpu, Building, ArrowRight, CornerDownLeft, LayoutDashboard, FolderOpen, Settings, Users, Wifi, LogOut, FileSearch, Loader2, File, Image, FileCode, Music, Video, Archive, Database, Settings2 } from 'lucide-react';
+import { Search, Server, Cpu, Building, ArrowRight, CornerDownLeft, LayoutDashboard, FolderOpen, Settings, Users, Wifi, LogOut, FileSearch, Loader2, File, Image, FileCode, Music, Video, Archive, Database, Settings2, Table } from 'lucide-react';
 import api from '../services/api';
 import { useLanguage } from '../contexts/LanguageContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -11,6 +11,7 @@ const STATIC_PAGES = [
     { id: 'p3', type: 'page', nameKey: 'networkScanner', path: '/network', icon: Wifi },
     { id: 'p4', type: 'page', nameKey: 'infrastructure', path: '/admin', icon: Settings },
     { id: 'p5', type: 'page', nameKey: 'userManagement', path: '/users', icon: Users },
+    { id: 'p6', type: 'page', nameKey: 'spreadsheetHub', path: '/spreadsheet', icon: Table },
 ];
 
 const FILE_ICONS = {

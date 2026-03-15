@@ -11,6 +11,7 @@ const networkRoutes = require('./networkRoutes');
 const systemRoutes = require('./systemRoutes');
 const savedPathsRoutes = require('./savedPathsRoutes');
 const activityLogRoutes = require('./activityLogRoutes');
+const spreadsheetRoutes = require('./spreadsheetRoutes');
 
 router.use('/auth', authRoutes);
 router.use('/users', userRoutes);
@@ -22,6 +23,7 @@ router.use('/network', networkRoutes);
 router.use('/system', systemRoutes);
 router.use('/saved-paths', savedPathsRoutes);
 router.use('/activity-logs', activityLogRoutes);
+router.use('/spreadsheet', spreadsheetRoutes);
 
 // Deep Health Check (Server Management)
 router.get('/health', async (req, res) => {
