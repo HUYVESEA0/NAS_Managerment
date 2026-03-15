@@ -9,6 +9,50 @@ const { decryptSecret } = require('../utils/credentialCrypto');
 // Base storage directory for simulation
 const STORAGE_ROOT = path.join(__dirname, '../../storage');
 
+// Chunk size cho agent streaming (2 MB)
+const AGENT_CHUNK_SIZE = 2 * 1024 * 1024;
+
+/**
+ * Stream một Node.js Readable vào agent qua receive_file_stream.
+ * Dùng mảng buffer thay vì Buffer.concat mỗi packet để giảm allocation O(N→1) mỗi chunk.
+ * @returns {Promise<number>} tổng bytes đã gửi
+ */
+async function pipeToAgent(machineIdInt, destPath, readable, isAdmin) {
+    let chunkIndex = 0;
+    let buffers = [];
+    let bufferedLength = 0;
+    let totalSize = 0;
+
+    for await (const data of readable) {
+        buffers.push(data);
+        bufferedLength += data.length;
+
+        while (bufferedLength >= AGENT_CHUNK_SIZE) {
+            const combined = Buffer.concat(buffers);        // 1 alloc per chunk, không phải per packet
+            const slice = combined.slice(0, AGENT_CHUNK_SIZE);
+            const remainder = combined.slice(AGENT_CHUNK_SIZE);
+            buffers = remainder.length ? [remainder] : [];
+            bufferedLength = remainder.length;
+
+            await agentManager.sendRequest(machineIdInt, 'receive_file_stream', {
+                path: destPath, chunkIndex, append: chunkIndex > 0,
+                data: slice.toString('base64'), complete: false, isAdmin
+            }, 60000);
+            totalSize += slice.length;
+            chunkIndex++;
+        }
+    }
+
+    // Chunk cuối (có thể rỗng nếu file rỗng)
+    const last = buffers.length ? Buffer.concat(buffers) : Buffer.alloc(0);
+    await agentManager.sendRequest(machineIdInt, 'receive_file_stream', {
+        path: destPath, chunkIndex, append: chunkIndex > 0,
+        data: last.toString('base64'), complete: true, isAdmin
+    }, 60000);
+    totalSize += last.length;
+    return totalSize;
+}
+
 // Allowed text extensions for file editing (whitelist — backend-enforced)
 const EDITABLE_EXTENSIONS = new Set([
     '.txt', '.md', '.json', '.js', '.cjs', '.mjs', '.ts', '.jsx', '.tsx',
@@ -314,29 +358,7 @@ exports.transferFile = async (req, res) => {
             const srcConfig = { host: srcMachine.ipAddress, port: srcMachine.port, username: srcMachine.username, password: srcPassword };
             const { stream: srcStream, size: srcSize, name: srcName } = await sshService.downloadFile(srcConfig, sourcePath);
             name = srcName;
-            const { PassThrough } = require('stream');
-            // Collect stream into buffer then relay as chunks to agent
-            const chunks = [];
-            await new Promise((resolve, reject) => {
-                srcStream.on('data', c => chunks.push(c));
-                srcStream.on('end', resolve);
-                srcStream.on('error', reject);
-            });
-            const totalBuf = Buffer.concat(chunks);
-            size = totalBuf.length;
-            const CHUNK = 2 * 1024 * 1024;
-            const totalChunks = Math.ceil(size / CHUNK);
-            for (let i = 0; i < totalChunks; i++) {
-                const slice = totalBuf.slice(i * CHUNK, (i + 1) * CHUNK);
-                await agentManager.sendRequest(parseInt(toMachineId), 'receive_file_stream', {
-                    path: destPath,
-                    chunkIndex: i,
-                    append: i > 0,
-                    data: slice.toString('base64'),
-                    complete: i === totalChunks - 1,
-                    isAdmin: isAdminUser
-                }, 60000);
-            }
+            size = await pipeToAgent(parseInt(toMachineId), destPath, srcStream, isAdminUser);
 
         // ── PRIORITY 4: Agent → Agent  (WebSocket relay — universal fallback) ──
         } else {
@@ -547,8 +569,82 @@ exports.uploadFile = async (req, res) => {
     }
 };
 
+// Stream Upload — nhận raw binary request body, không dùng multer
+// POST /api/files/upload-stream?machineId=X&path=/dest/path/file.ext
+// Content-Type: application/octet-stream
+exports.uploadFileStream = async (req, res) => {
+    try {
+        const machineId = req.query.machineId;
+        const destPath = req.query.path || null;
+
+        if (!machineId || !destPath) {
+            req.resume(); // xả stream để tránh treo kết nối
+            return res.status(400).json({ error: 'machineId and path are required' });
+        }
+
+        try { sanitizePath(destPath); } catch (e) {
+            req.resume();
+            return res.status(e.status || 400).json({ error: e.message });
+        }
+
+        const isMaster = machineId === 'master';
+        const machineIdInt = isMaster ? null : parseInt(machineId);
+        const isAdminUser = req.user && (req.user.roleName === 'Admin' || req.user.permissions?.includes('ALL'));
+        const filename = path.basename(destPath);
+
+        // === PRIORITY 1: Agent WebSocket — chunk req stream → gửi từng miếng đến agent ===
+        if (!isMaster && agentManager.isAgentConnected(machineIdInt)) {
+            await pipeToAgent(machineIdInt, destPath, req, isAdminUser);
+            notificationHub.broadcast('file:uploaded', { machineId, path: destPath });
+            logActivity({ category: 'file', action: 'upload', message: `Uploaded "${filename}" to machine ${machineId}`, userId: req.user?.id, machineId: machineIdInt, ipAddress: req.ip, meta: { machineId, path: destPath } });
+            return res.json({ success: true, path: destPath });
+        }
+
+        // === PRIORITY 2: SSH — pipe req trực tiếp vào SFTP write stream, không buffer ===
+        const machine = isMaster ? null : await prisma.machine.findUnique({ where: { id: machineIdInt } });
+        const machinePassword = getDecryptedMachinePassword(machine);
+        if (!isMaster && machine?.ipAddress && machine?.username && machinePassword) {
+            const sshService = require('../utils/sshService');
+            await sshService.uploadFile({
+                host: machine.ipAddress,
+                port: machine.port,
+                username: machine.username,
+                password: machinePassword
+            }, destPath, req); // req là Readable stream — pipe thẳng, không qua RAM
+
+            notificationHub.broadcast('file:uploaded', { machineId, path: destPath });
+            logActivity({ category: 'file', action: 'upload', message: `Uploaded "${filename}" to machine ${machineId} via SSH`, userId: req.user?.id, machineId: machineIdInt, ipAddress: req.ip, meta: { machineId, path: destPath } });
+            return res.json({ success: true, path: destPath });
+        }
+
+        // === PRIORITY 3: Local / Master — pipe req vào fs.createWriteStream ===
+        let absolutePath;
+        if (isMaster) {
+            absolutePath = path.isAbsolute(destPath) ? destPath : path.resolve(process.cwd(), destPath);
+        } else {
+            const safe = path.normalize(destPath.replace(/:/g, '')).replace(/^(\.\.[/\\])+/, '');
+            absolutePath = path.join(STORAGE_ROOT, `machine-${machineId}`, safe);
+        }
+
+        fs.mkdirSync(path.dirname(absolutePath), { recursive: true });
+
+        await new Promise((resolve, reject) => {
+            const writeStream = fs.createWriteStream(absolutePath);
+            req.pipe(writeStream);
+            writeStream.on('finish', resolve);
+            writeStream.on('error', reject);
+            req.on('error', reject);
+        });
+
+        notificationHub.broadcast('file:uploaded', { machineId, path: destPath });
+        logActivity({ category: 'file', action: 'upload', message: `Uploaded "${filename}" to machine ${machineId}`, userId: req.user?.id, machineId: machineIdInt, ipAddress: req.ip, meta: { machineId, path: destPath } });
+        return res.json({ success: true, path: destPath });
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+};
+
 // Edit (overwrite) file content
-// PUT /api/files/edit  body: { machineId, path, content (plain text) }
 exports.editFile = async (req, res) => {
     try {
         const { machineId, path: filePath, content } = req.body;

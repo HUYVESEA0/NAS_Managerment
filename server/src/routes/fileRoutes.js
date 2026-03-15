@@ -21,6 +21,9 @@ router.post('/mkdir', authorize('WRITE_FILES', 'MANAGE_FILES'), authorizeMachine
 router.put('/rename', authorize('WRITE_FILES', 'MANAGE_FILES'), authorizeMachineScope(), fileController.renameItem);
 router.delete('/delete', authorize('DELETE_FILES', 'MANAGE_FILES'), authorizeMachineScope(), fileController.deleteItem);
 router.post('/upload', authorize('WRITE_FILES', 'MANAGE_FILES'), authorizeMachineScope(), upload.single('file'), fileController.uploadFile);
+// Chunked stream upload — không dùng multer, nhận raw binary stream từ browser
+// machineId và path đặt trong query params thay vì body
+router.post('/upload-stream', authorize('WRITE_FILES', 'MANAGE_FILES'), authorizeMachineScope(), fileController.uploadFileStream);
 router.post('/transfer', authorize('WRITE_FILES', 'MANAGE_FILES'), authorizeMachineScope(), fileController.transferFile);
 router.put('/edit', authorize('WRITE_FILES', 'MANAGE_FILES'), authorizeMachineScope(), fileController.editFile);
 

@@ -403,6 +403,8 @@ export const vi = {
     lowercaseHint: 'Chữ thường, số, gạch dưới, gạch ngang',
     creating: 'Đang tạo...',
     changePassword: 'Đổi Mật Khẩu',
+    forgotPassword: 'Quên mật khẩu?',
+    contactAdminForReset: 'Liên hệ quản trị viên để đặt lại mật khẩu của bạn.',
     deleteSSHUser: 'Xóa Tài Khoản SSH?',
     deleteSSHUserWarning: 'và thư mục home sẽ bị xóa khỏi máy.',
     newPasswordPlaceholder: 'Mật khẩu mới',

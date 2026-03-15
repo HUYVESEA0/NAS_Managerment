@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage } from '../contexts/LanguageContext';
-import { Terminal, Lock, User, Eye, EyeOff, Shield, Server, ArrowRight, Loader2 } from 'lucide-react';
+import { Terminal, Lock, User, Eye, EyeOff, Shield, Server, ArrowRight, Loader2, HelpCircle } from 'lucide-react';
 import ThemeToggle from '../components/ThemeToggle';
 
 // ── Background Effects ──
@@ -21,6 +21,7 @@ const Login = () => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [showPassword, setShowPassword] = useState(false);
+    const [showForgotInfo, setShowForgotInfo] = useState(false);
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
     const [sysInfo, setSysInfo] = useState([]);
@@ -170,6 +171,23 @@ const Login = () => {
                             </div>
                         </div>
 
+                        {/* Forgot Password */}
+                        <div className="flex justify-end">
+                            <button
+                                type="button"
+                                onClick={() => setShowForgotInfo(!showForgotInfo)}
+                                className="text-xs font-mono text-muted hover:text-accent transition-colors flex items-center gap-1"
+                            >
+                                <HelpCircle size={12} />
+                                {t('forgotPassword')}
+                            </button>
+                        </div>
+                        {showForgotInfo && (
+                            <div className="p-3 bg-accent/5 border border-accent/20 rounded-lg text-secondary text-xs font-mono flex items-start gap-2 animate-fadeUp">
+                                <HelpCircle size={14} className="shrink-0 mt-0.5 text-accent" />
+                                <span>{t('contactAdminForReset')}</span>
+                            </div>
+                        )}
                         {error && (
                             <div className="p-3 bg-danger/10 border border-danger/20 rounded-lg text-danger text-sm font-mono flex items-start gap-2 animate-fadeUp">
                                 <Shield size={16} className="shrink-0 mt-0.5" />

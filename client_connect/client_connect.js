@@ -817,6 +817,8 @@ class NASAgent {
         this.maxReconnectDelay = 30000;
         this.isShuttingDown = false;
         this.diagnosticsCache = null;
+        // WriteStream mở sẵn cho mỗi transfer đang diễn ra — key = absPath
+        this.activeWriteStreams = new Map();
     }
 
     async connect() {
@@ -878,6 +880,13 @@ class NASAgent {
         });
 
         this.ws.on('close', () => {
+            // Đóng tất cả write stream còn mở (transfer bị gián đoạn giữa chừng)
+            for (const [p, wStream] of this.activeWriteStreams) {
+                wStream.destroy();
+                logger.warn(`Closed incomplete write stream: ${p}`);
+            }
+            this.activeWriteStreams.clear();
+
             if (!this.isShuttingDown) {
                 logger.warn('Disconnected from server');
                 this._scheduleReconnect();
@@ -994,12 +1003,12 @@ class NASAgent {
             }
 
             case 'search_files':
-                console.log(`🔍 Search: "${params.query}" in ${params.path}`);
+                logger.info(`Search: "${params.query}" in ${params.path}`);
                 result = await searchFiles({ ...params, configPaths: configPaths });
                 break;
 
             case 'preview_file':
-                console.log(`👁️ Preview: ${params.path}`);
+                logger.info(`Preview: ${params.path}`);
                 result = await previewFile(params);
                 break;
 
@@ -1033,6 +1042,9 @@ class NASAgent {
                 try {
                     logger.info(`Rename: ${params.path} -> ${params.newName}`);
                     if (!params.path || !params.newName) throw new Error('Path and newName required');
+                    // Strip directory components from newName to prevent path traversal
+                    const safeName = path.basename(params.newName);
+                    if (!safeName || safeName === '.' || safeName === '..') throw new Error('Invalid new name');
                     if (configPaths && configPaths.length > 0) {
                         const { allowed } = isPathAllowed(params.path, configPaths);
                         if (!allowed) throw new Error(`Access denied: outside allowed paths`);
@@ -1040,7 +1052,7 @@ class NASAgent {
                     const oldPath = path.isAbsolute(params.path) ? params.path : path.resolve(process.cwd(), params.path);
                     if (!fs.existsSync(oldPath)) throw new Error('Source path not found');
                     const dir = path.dirname(oldPath);
-                    const newPath = path.join(dir, params.newName);
+                    const newPath = path.join(dir, safeName);
                     if (fs.existsSync(newPath)) throw new Error('Destination path already exists');
                     fs.renameSync(oldPath, newPath);
                     result = { success: true, newPath };
@@ -1078,8 +1090,7 @@ class NASAgent {
                         if (!allowed) throw new Error(`Access denied: outside allowed paths`);
                     }
                     const target = path.isAbsolute(writePath) ? writePath : path.resolve(process.cwd(), writePath);
-                    const dir = path.dirname(target);
-                    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+                    fs.mkdirSync(path.dirname(target), { recursive: true });
                     const buffer = Buffer.from(params.content, 'base64');
                     fs.writeFileSync(target, buffer);
                     result = { success: true, size: buffer.length };
@@ -1088,7 +1099,7 @@ class NASAgent {
 
             case 'receive_file_stream': {
                 // Receive incoming file sent chunk-by-chunk from server relay
-                // params: { path, chunkIndex, totalChunks, data (base64), complete }
+                // params: { path, chunkIndex, append, data (base64), complete }
                 try {
                     if (!params.path) throw new Error('Path required');
                     // Normalize: collapse double slashes, convert forward→back on Windows
@@ -1098,20 +1109,41 @@ class NASAgent {
                         if (!allowed) throw new Error(`Access denied: '${recvPath}' is outside allowed paths`);
                     }
                     const absPath = path.isAbsolute(recvPath) ? recvPath : path.resolve(process.cwd(), recvPath);
-                    const dir = path.dirname(absPath);
-                    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
                     const chunkBuf = Buffer.from(params.data || '', 'base64');
 
                     if (params.chunkIndex === 0 && !params.append) {
-                        // First chunk — (over)write file
-                        fs.writeFileSync(absPath, chunkBuf);
+                        // Chunk đầu: mở WriteStream mới (đóng stream cũ nếu path trùng)
+                        if (this.activeWriteStreams.has(absPath)) {
+                            this.activeWriteStreams.get(absPath).destroy();
+                        }
+                        fs.mkdirSync(path.dirname(absPath), { recursive: true });
+                        const wStream = fs.createWriteStream(absPath);
+                        // Prevent unhandled 'error' event crash if stream emits between awaits
+                        wStream.on('error', (err) => {
+                            logger.error(`WriteStream error [${absPath}]: ${err.message}`);
+                            this.activeWriteStreams.delete(absPath);
+                        });
+                        this.activeWriteStreams.set(absPath, wStream);
+                        await new Promise((resolve, reject) => {
+                            wStream.write(chunkBuf, (err) => err ? reject(err) : resolve());
+                        });
                     } else {
-                        // Subsequent chunks — append
-                        fs.appendFileSync(absPath, chunkBuf);
+                        // Các chunk tiếp theo: ghi vào stream đang mở, không mở/đóng file handle
+                        const wStream = this.activeWriteStreams.get(absPath);
+                        if (!wStream) throw new Error(`No active write stream for: ${absPath}`);
+                        await new Promise((resolve, reject) => {
+                            wStream.write(chunkBuf, (err) => err ? reject(err) : resolve());
+                        });
                     }
 
                     if (params.complete) {
+                        const wStream = this.activeWriteStreams.get(absPath);
+                        if (wStream) {
+                            await new Promise((resolve, reject) => {
+                                wStream.end((err) => err ? reject(err) : resolve());
+                            });
+                            this.activeWriteStreams.delete(absPath);
+                        }
                         logger.info(`receive_file_stream complete: ${absPath}`);
                         result = { success: true, path: absPath };
                     } else {
@@ -1155,21 +1187,23 @@ class NASAgent {
                     data: { status: 'streaming', size: fileStat.size, name: path.basename(targetPath) }
                 });
 
-                // Stream file in chunks
+                // Stream file in chunks — await each WS send before reading the next chunk
+                // (proper backpressure: never flood WS buffer regardless of file size)
                 const readStream = fs.createReadStream(targetPath, { highWaterMark: CHUNK_SIZE });
-                readStream.on('data', (chunk) => {
-                    readStream.pause();
-                    this._send({ type: 'stream_chunk', requestId, data: chunk.toString('base64'), last: false });
-                    // Small delay to avoid flooding the WebSocket buffer
-                    setImmediate(() => readStream.resume());
+                const wsSend = (payload) => new Promise((resolve, reject) => {
+                    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return reject(new Error('WS closed'));
+                    this.ws.send(JSON.stringify(payload), (err) => err ? reject(err) : resolve());
                 });
-                readStream.on('end', () => {
-                    this._send({ type: 'stream_chunk', requestId, data: '', last: true });
+                try {
+                    for await (const chunk of readStream) {
+                        await wsSend({ type: 'stream_chunk', requestId, data: chunk.toString('base64'), last: false });
+                    }
+                    await wsSend({ type: 'stream_chunk', requestId, data: '', last: true });
                     logger.info(`Stream download complete: ${targetPath}`);
-                });
-                readStream.on('error', (err) => {
-                    this._send({ type: 'response', requestId, error: `Read error: ${err.message}` });
-                });
+                } catch (err) {
+                    readStream.destroy();
+                    this._send({ type: 'response', requestId, error: `Stream error: ${err.message}` });
+                }
                 return; // Skip normal result handling
             }
 

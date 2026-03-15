@@ -405,6 +405,8 @@ export const zh = {
     lowercaseHint: '小写字母、数字、下划线、连字符',
     creating: '创建中...',
     changePassword: '更改密码',
+    forgotPassword: '忘记密码？',
+    contactAdminForReset: '请联系管理员重置您的密码。',
     deleteSSHUser: '删除 SSH 用户？',
     deleteSSHUserWarning: '及其主目录将从机器中删除。',
     newPasswordPlaceholder: '新密码',

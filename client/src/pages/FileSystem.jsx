@@ -129,6 +129,7 @@ const FileSystem = () => {
     const [editLoading, setEditLoading] = useState(false);
     const [editSaving, setEditSaving] = useState(false);
     const [uploading, setUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
 
     // Downloads: Map<filePath, { name, progress, status, loaded, cancel, errorMsg }>
     const [downloads, setDownloads] = useState(new Map());
@@ -304,23 +305,31 @@ const FileSystem = () => {
         const file = e.target.files[0];
         if (!file) return;
 
-        const formData = new FormData();
-        formData.append('file', file);
-        formData.append('machineId', machineId);
-        // If pathParam is empty, use dot (.) to signify current directory
-        formData.append('path', pathParam || '.');
+        // Xây dựng đường dẫn đích đầy đủ (thư mục hiện tại + tên file)
+        const dir = pathParam || '.';
+        const destPath = dir.endsWith('/') ? `${dir}${file.name}` : `${dir}/${file.name}`;
 
         setUploading(true);
+        setUploadProgress(0);
         try {
-            await api.post('/files/upload', formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
+            await api.post(
+                `/files/upload-stream?machineId=${encodeURIComponent(machineId)}&path=${encodeURIComponent(destPath)}`,
+                file, // gửi File object trực tiếp — browser stream lên server, không load vào RAM
+                {
+                    headers: { 'Content-Type': 'application/octet-stream' },
+                    onUploadProgress: (e) => {
+                        if (e.total) setUploadProgress(Math.round(e.loaded / e.total * 100));
+                    },
+                    timeout: 0 // không timeout với file lớn
+                }
+            );
             showNotification('success', t('uploadedSuccessfully'));
             fetchFiles();
         } catch (err) {
             showNotification('error', err.response?.data?.error || t('uploadFailed'));
         } finally {
             setUploading(false);
+            setUploadProgress(0);
             e.target.value = null;
         }
     };
@@ -1009,11 +1018,12 @@ const FileSystem = () => {
 
                             {/* Upload */}
                             <label title={t('upload') || 'Upload'}
-                                style={{ padding: '5px 8px', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 7, color: uploading ? 'var(--accent-cyan)' : 'var(--text-muted)', cursor: 'pointer', display: 'flex' }}
+                                style={{ padding: '5px 8px', background: 'var(--bg-elevated)', border: '1px solid var(--border-default)', borderRadius: 7, color: uploading ? 'var(--accent-cyan)' : 'var(--text-muted)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4 }}
                                 onMouseEnter={e => { if (!uploading) { e.currentTarget.style.color = 'var(--accent-cyan)'; e.currentTarget.style.borderColor = 'rgba(6,182,212,0.3)'; } }}
                                 onMouseLeave={e => { if (!uploading) { e.currentTarget.style.color = 'var(--text-muted)'; e.currentTarget.style.borderColor = 'var(--border-default)'; } }}
                             >
                                 {uploading ? <Loader2 size={14} style={{ animation: 'spin 0.8s linear infinite' }} /> : <UploadCloud size={14} />}
+                                {uploading && uploadProgress > 0 && <span style={{ fontSize: 11, fontVariantNumeric: 'tabular-nums' }}>{uploadProgress}%</span>}
                                 <input type="file" style={{ display: 'none' }} onChange={handleFileUpload} disabled={uploading} />
                             </label>
 

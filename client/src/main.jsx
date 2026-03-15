@@ -18,6 +18,7 @@ const NetworkScanner = React.lazy(() => import('./pages/NetworkScanner'))
 const NetworkTopology = React.lazy(() => import('./pages/NetworkTopology'))
 const SystemStatus = React.lazy(() => import('./pages/SystemStatus'))
 const ActivityLog = React.lazy(() => import('./pages/ActivityLog'))
+const Profile = React.lazy(() => import('./pages/Profile'))
 
 const PageLoader = () => (
   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-base)' }}>
@@ -102,6 +103,7 @@ ReactDOM.createRoot(document.getElementById('root')).render(
                       </ProtectedRoute>
                     }
                   />
+                  <Route path="profile" element={<Profile />} />
                 </Route>
               </Routes>
             </Suspense>

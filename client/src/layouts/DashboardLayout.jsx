@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Server, Folder, Settings, Users, LogOut, Shield, ChevronDown, Globe, Wifi, Activity, Terminal } from 'lucide-react';
+import { LayoutDashboard, Server, Folder, Settings, Users, LogOut, Shield, ChevronDown, Globe, Wifi, Activity, Terminal, User } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useLanguage, LANGUAGES } from '../contexts/LanguageContext';
 import { useTheme } from '../contexts/ThemeContext';
@@ -142,7 +142,15 @@ const DashboardLayout = () => {
                 </nav>
 
                 {/* Bottom Actions */}
-                <div className="p-4 border-t border-border-subtle">
+                <div className="p-4 border-t border-border-subtle space-y-1">
+                    <Link
+                        to="/profile"
+                        className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg font-mono text-sm font-bold transition-colors
+                            ${location.pathname === '/profile' ? 'bg-nav-active-bg text-nav-active-text' : 'text-secondary hover:bg-hover hover:text-primary'}`}
+                    >
+                        <User size={18} className={location.pathname === '/profile' ? 'text-accent' : 'text-muted'} />
+                        {t('myProfile')}
+                    </Link>
                     <button
                         onClick={handleLogout}
                         className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-secondary hover:bg-hover hover:text-primary transition-colors font-mono text-sm font-bold"

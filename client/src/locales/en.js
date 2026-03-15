@@ -405,6 +405,8 @@ export const en = {
     lowercaseHint: 'Lowercase letters, numbers, underscore, hyphen',
     creating: 'Creating...',
     changePassword: 'Change Password',
+    forgotPassword: 'Forgot password?',
+    contactAdminForReset: 'Contact your administrator to reset your password.',
     deleteSSHUser: 'Delete SSH User?',
     deleteSSHUserWarning: 'and their home directory will be removed from the machine.',
     newPasswordPlaceholder: 'New password',
